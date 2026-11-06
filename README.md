@@ -18,6 +18,8 @@ To upgrade, replace the binary (on Windows, rename the running `loadslot.exe` fi
 
 From then on, heavy commands your agents run go through loadslot. `loadslot status` shows what runs and waits; in [Orca](#orca), the status bar and a panel show it.
 
+In Orca, the plugin does steps 1 and 2 for you: its panel offers to install loadslot and run its setup.
+
 ## Why
 
 Several agents, each in its own worktree, start `tsc`, test suites and builds at the same time. On a 16 GB machine that exhausts memory: everything freezes and the OOM killer takes agents with it. Agent IDEs can cap the number of agents, but nothing coordinates the commands they run.
@@ -109,7 +111,8 @@ This repository is also an Orca plugin (`orca-plugin.json` at the root, code in 
 
 - **Status bar:** `loadslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
 - **Panel** (press the item to open the right sidebar, then pick the loadslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; recent outcomes, with guard stops called out; jobs by repository; setup checks
-- It reads `loadslot status --json` every 5 seconds, so install loadslot first. It finds `loadslot` on Orca's `PATH`, in `~/.local/bin`, `~/go/bin`, WinGet's `Links` or Homebrew's `bin`, or at `LOADSLOT_BIN`
+- **Install from the panel:** when loadslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in loadslot's data directory and runs `loadslot setup`. When a hook is missing, it offers `loadslot setup` alone. Nothing is downloaded or written before a press
+- It reads `loadslot status --json` every 5 seconds. It finds `loadslot` at `LOADSLOT_BIN`, in its own `bin`, on Orca's `PATH`, in `~/.local/bin`, `~/go/bin`, WinGet's `Links` or Homebrew's `bin`
 - It only shows; gating comes from the agents' hooks
 - Development: `orca plugin dev load .`, then `orca plugin logs local.loadslot`
 

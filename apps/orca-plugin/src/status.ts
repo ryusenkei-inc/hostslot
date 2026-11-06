@@ -50,7 +50,8 @@ export type Status = {
 };
 
 /** A check of `loadslot doctor --json`, or one the plugin adds. */
-export type Problem = { level: 'ok' | 'info' | 'warn' | 'error'; text: string };
+/** A line of `loadslot doctor --json`; `fix` names the command that fixes it. */
+export type Problem = { level: 'ok' | 'info' | 'warn' | 'error'; text: string; fix?: 'setup' };
 
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 

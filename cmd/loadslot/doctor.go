@@ -18,6 +18,9 @@ import (
 type check struct {
 	Level string `json:"level"` // ok, info, warn, error
 	Text  string `json:"text"`
+	// Fix names the command that fixes the problem ("setup"), so the Orca
+	// plugin can offer to run it.
+	Fix string `json:"fix,omitempty"`
 }
 
 // cmdDoctor reports whether loadslot is installed and wired up, with the fix
@@ -35,12 +38,12 @@ func cmdDoctor(args []string) int {
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
-	checks := []check{{"ok", version() + " at " + exe}}
+	checks := []check{{Level: "ok", Text: version() + " at " + exe}}
 	checks = append(checks, pathCheck(exe))
 	if p, err := nativePlatform(); err == nil {
 		checks = append(checks, daemonCheck(p))
 	} else {
-		checks = append(checks, check{"error", "data directory: " + err.Error()})
+		checks = append(checks, check{Level: "error", Text: "data directory: " + err.Error()})
 	}
 	for _, a := range setup.Agents {
 		if c, ok := hookCheck(a, exe); ok {
@@ -48,7 +51,7 @@ func cmdDoctor(args []string) int {
 		}
 	}
 	if os.Getenv("LOADSLOT_DISABLE") == "1" {
-		checks = append(checks, check{"warn", "LOADSLOT_DISABLE=1 is set: commands run without the gate"})
+		checks = append(checks, check{Level: "warn", Text: "LOADSLOT_DISABLE=1 is set: commands run without the gate"})
 	}
 	if *asJSON {
 		code := 0
@@ -68,24 +71,24 @@ func cmdDoctor(args []string) int {
 func pathCheck(exe string) check {
 	onPath, err := exec.LookPath("loadslot")
 	if err != nil {
-		return check{"info", "loadslot is not on the PATH. Hooks use absolute paths and work anyway; add its directory to the PATH to run loadslot yourself"}
+		return check{Level: "info", Text: "loadslot is not on the PATH. Hooks use absolute paths and work anyway; add its directory to the PATH to run loadslot yourself"}
 	}
 	if sameFile(onPath, exe) {
-		return check{"ok", "on the PATH as " + onPath}
+		return check{Level: "ok", Text: "on the PATH as " + onPath}
 	}
-	return check{"warn", "loadslot on the PATH (" + onPath + ") is another file than this one. Remove the copy you don't use, or ignore this for a package manager's shim"}
+	return check{Level: "warn", Text: "loadslot on the PATH (" + onPath + ") is another file than this one. Remove the copy you don't use, or ignore this for a package manager's shim"}
 }
 
 func daemonCheck(p *platform.Platform) check {
 	s, err := daemon.QueryStatus(p)
 	if err != nil {
-		return check{"info", "daemon not running; the next loadslot run starts it"}
+		return check{Level: "info", Text: "daemon not running; the next loadslot run starts it"}
 	}
 	text := fmt.Sprintf("daemon pid %d %s, slots %d/%d used, %d MB free", s.PID, s.Version, s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB)
 	if daemon.Older(s.Version, daemon.Version()) {
-		return check{"warn", text + ": older than this loadslot; the next loadslot run retires it"}
+		return check{Level: "warn", Text: text + ": older than this loadslot; the next loadslot run retires it"}
 	}
-	return check{"ok", text}
+	return check{Level: "ok", Text: text}
 }
 
 // hookCheck checks an agent's hook. It reports nothing for an agent that is
@@ -93,27 +96,27 @@ func daemonCheck(p *platform.Platform) check {
 func hookCheck(a setup.Agent, exe string) (check, bool) {
 	file, err := setup.SettingsPath(a)
 	if err != nil {
-		return check{"error", string(a) + ": " + err.Error()}, true
+		return check{Level: "error", Text: string(a) + ": " + err.Error()}, true
 	}
 	command, found, err := setup.Find(file, a)
 	switch {
 	case err != nil:
-		return check{"error", fmt.Sprintf("%s: cannot read %s: %v", a, file, err)}, true
+		return check{Level: "error", Text: fmt.Sprintf("%s: cannot read %s: %v", a, file, err)}, true
 	case !found && !setup.Detected(a):
 		return check{}, false
 	case !found:
-		return check{"warn", fmt.Sprintf("%s: hook not registered in %s. Run: loadslot setup", a, file)}, true
+		return check{Level: "warn", Text: fmt.Sprintf("%s: hook not registered in %s. Run: loadslot setup", a, file), Fix: "setup"}, true
 	}
 	hookExe := filepath.FromSlash(setup.HookExe(command, a))
 	if _, err := os.Stat(hookExe); err != nil {
 		if _, lookErr := exec.LookPath(hookExe); lookErr != nil {
-			return check{"error", fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: loadslot setup", a, hookExe)}, true
+			return check{Level: "error", Text: fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: loadslot setup", a, hookExe), Fix: "setup"}, true
 		}
 	}
 	if resolved, err := exec.LookPath(hookExe); err == nil && !sameFile(resolved, exe) {
-		return check{"warn", fmt.Sprintf("%s: the hook runs another loadslot (%s). Run: loadslot setup", a, hookExe)}, true
+		return check{Level: "warn", Text: fmt.Sprintf("%s: the hook runs another loadslot (%s). Run: loadslot setup", a, hookExe), Fix: "setup"}, true
 	}
-	return check{"ok", fmt.Sprintf("%s: hook registered in %s", a, file)}, true
+	return check{Level: "ok", Text: fmt.Sprintf("%s: hook registered in %s", a, file)}, true
 }
 
 func sameFile(a, b string) bool {
