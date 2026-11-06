@@ -63,6 +63,16 @@ export type Offer = {
   result?: { ok: boolean; text: string };
 };
 
+/** Recent jobs one guard stopped, with why in one sentence. */
+export type GuardGroup = {
+  key: string;
+  title: string;
+  explanation: string;
+  /** The newest few; the rest are only counted (they are in Recent). */
+  rows: { key: string; title: string; where: string; peak: string; ended: number }[];
+  more: number;
+};
+
 /** Everything the panel draws; plain JSON, as it crosses from the worker. */
 export type View = {
   headline: string;
@@ -73,8 +83,8 @@ export type View = {
   running: JobRow[];
   waiting: WaitRow[];
   recent: RecentRow[];
-  /** Recent jobs a guard stopped, in sentences, so they are not missed. */
-  guardStops: string[];
+  /** Recent jobs a guard stopped, by guard, so they are not missed. */
+  guardStops: GuardGroup[];
   byRepo: { key: string; repo: string; summary: string }[];
   problem?: { title: string; detail: string; link: string };
   /** Warnings and errors about the setup, with what to do. */
@@ -201,13 +211,45 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
         ended: time(f.ended, now),
       };
     }),
-    guardStops: (s.recent ?? [])
-      .filter((f) => f.outcome === 'ceiling' || f.outcome === 'machine')
-      .map((f) => `${title(f)} (${origin(f)}): ${(outcomes[f.outcome]?.[2] ?? '').toLowerCase()}${f.peakMB ? ` at ${size(f.peakMB)}` : ''}`),
+    guardStops: guardStops(s, now),
     byRepo: byRepo([...running, ...waiting]),
     problems,
     checks,
   };
+}
+
+const guardRows = 3;
+
+const guards: { outcome: string; title: string; explanation: (s: Status) => string }[] = [
+  {
+    outcome: 'machine',
+    title: 'Machine nearly out of memory',
+    explanation: () => 'loadslot stopped the largest job running in the background. Run it again when there is room.',
+  },
+  {
+    outcome: 'ceiling',
+    title: 'Over the memory ceiling per job',
+    explanation: (s) =>
+      `Each job may use up to ${s.ceilingMB ? size(s.ceilingMB) : 'its ceiling'}; these used more and were stopped.`,
+  },
+];
+
+function guardStops(s: Status, now: number): GuardGroup[] {
+  const recent = s.recent ?? [];
+  return guards.flatMap((g) => {
+    const rows = recent
+      .map((f, i) => ({ f, i }))
+      .filter(({ f }) => f.outcome === g.outcome)
+      .map(({ f, i }) => ({
+        key: `${f.ended}#${i}`,
+        title: title(f),
+        where: origin(f),
+        peak: f.peakMB ? size(f.peakMB) : '–',
+        ended: time(f.ended, now),
+      }));
+    if (rows.length === 0) return [];
+    return [{ key: g.outcome, title: g.title, explanation: g.explanation(s), rows: rows.slice(0, guardRows), more: Math.max(0, rows.length - guardRows) }];
+  });
 }
 
 // Memory as admission sees it: free memory minus what running jobs may

@@ -80,7 +80,25 @@ it('lists recent jobs, with stops by a guard called out', () => {
   ]);
   expect(v.recent[0]?.outcomeDetail).toBe('Used more than its memory ceiling and was stopped');
   expect(v.recent[1]?.outcomeDetail).toBe('Exited with an error (exit 1)');
-  expect(v.guardStops).toEqual(['vitest run (shop): used more than its memory ceiling and was stopped at 12.2 GB']);
+  expect(v.guardStops).toEqual([
+    {
+      key: 'ceiling',
+      title: 'Over the memory ceiling per job',
+      explanation: 'Each job may use up to 12.0 GB; these used more and were stopped.',
+      rows: [{ key: '2026-11-06T10:04:00Z#0', title: 'vitest run', where: 'shop', peak: '12.2 GB', ended: Date.parse('2026-11-06T10:04:00Z') }],
+      more: 0,
+    },
+  ]);
+  const stops = Array.from({ length: 5 }, (_, i) => ({
+    command: 'x',
+    dir: '/dev/shop',
+    key: 'git:/dev/shop/.git\n.\nvitest run',
+    outcome: 'machine',
+    exitCode: 77,
+    ended: `2026-11-06T10:0${4 - i}:00Z`,
+  }));
+  const many = view(status({ recent: stops }), '', [], 0, now).guardStops[0];
+  expect([many?.title, many?.rows.length, many?.more]).toEqual(['Machine nearly out of memory', 3, 2]);
 });
 
 it('groups jobs by repository', () => {
