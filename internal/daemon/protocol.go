@@ -17,6 +17,8 @@ const (
 	OpAcquire = "acquire"
 	OpRelease = "release"
 	OpStatus  = "status"
+	// OpUsage reports the current memory of a running job.
+	OpUsage = "usage"
 	// OpRetire asks an older daemon to make way (see RetireOlder).
 	OpRetire = "retire"
 )
@@ -38,6 +40,7 @@ type Message struct {
 
 	Request *gate.Request `json:"request,omitempty"`
 	Sample  *store.Sample `json:"sample,omitempty"`
+	UsageMB uint64        `json:"usageMB,omitempty"`
 
 	Job      *gate.Job `json:"job,omitempty"`
 	Position int       `json:"position,omitempty"`

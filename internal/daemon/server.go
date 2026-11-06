@@ -238,14 +238,26 @@ func (s *Server) serveJob(r *bufio.Reader, enc *json.Encoder, req gate.Request) 
 	s.cycleLocked(false)
 	s.mu.Unlock()
 
-	// The reader sees the release message or the connection closing.
+	// The reader sees usage reports, then the release message or the
+	// connection closing.
 	released := make(chan *store.Sample, 1)
 	go func() {
-		var m Message
-		if readMessage(r, &m) == nil && m.Op == OpRelease {
-			released <- m.Sample
+		defer close(released)
+		for {
+			var m Message
+			if readMessage(r, &m) != nil {
+				return
+			}
+			switch m.Op {
+			case OpUsage:
+				s.mu.Lock()
+				s.sched.Report(job.ID, m.UsageMB)
+				s.mu.Unlock()
+			case OpRelease:
+				released <- m.Sample
+				return
+			}
 		}
-		close(released)
 	}()
 
 	done := func(sample *store.Sample) {

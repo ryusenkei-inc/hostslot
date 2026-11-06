@@ -77,7 +77,7 @@ func Run(p *platform.Platform, o Options) (int, error) {
 		return 2, errors.New("no command")
 	}
 	if o.Disable || o.Nested {
-		code, _, err := execute(p, o, os.Environ(), nil)
+		code, _, err := execute(p, o, os.Environ(), nil, nil)
 		return code, err
 	}
 	cfg, err := config.Load(p.Paths.Data)
@@ -113,7 +113,7 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	env := append(withWorkers(os.Environ(), workers), JobVar+"=1")
 	start := time.Now()
 	var peak uint64
-	code, timedOut, err := execute(p, o, env, &peak)
+	code, timedOut, err := execute(p, o, env, &peak, l.report)
 	sample := &store.Sample{PeakMB: peak, DurationMS: time.Since(start).Milliseconds(), ExitCode: code, At: time.Now()}
 	// A killed run's peak is only a lower bound of its cost.
 	if err != nil || timedOut {
@@ -145,8 +145,12 @@ func withWorkers(env []string, workers int) []string {
 	return env
 }
 
+// usageEvery is how often a running job reports its memory to the daemon.
+const usageEvery = 2 * time.Second
+
 // execute runs the command; timedOut reports that o.Timeout killed it.
-func execute(p *platform.Platform, o Options, env []string, peak *uint64) (code int, timedOut bool, err error) {
+// report, when set, receives the tree's current memory every usageEvery.
+func execute(p *platform.Platform, o Options, env []string, peak *uint64, report func(uint64)) (code int, timedOut bool, err error) {
 	cmd := exec.Command(o.Args[0], o.Args[1:]...)
 	cmd.Dir = o.Dir
 	cmd.Env = env
@@ -176,6 +180,12 @@ func execute(p *platform.Platform, o Options, env []string, peak *uint64) (code 
 		defer t.Stop()
 		expired = t.C
 	}
+	var usage <-chan time.Time
+	if report != nil {
+		t := time.NewTicker(usageEvery)
+		defer t.Stop()
+		usage = t.C
+	}
 	var werr error
 	signals := 0
 loop:
@@ -193,6 +203,10 @@ loop:
 		case <-expired:
 			timedOut = true
 			_ = proc.KillTree()
+		case <-usage:
+			if mb := proc.CurrentMB(); mb > 0 {
+				report(mb)
+			}
 		}
 	}
 	if peak != nil {

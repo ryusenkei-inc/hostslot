@@ -130,6 +130,36 @@ func TestCrashReturnsSlot(t *testing.T) {
 	}
 }
 
+func TestAdmitHoldsHeadroomOfGrowingLearnedJobs(t *testing.T) {
+	learned := Request{Command: "tsc -b", Dir: "/repo", Weight: 1}
+	est := fakeEstimator{learned.Key(): {2000, 2400, 2200}}
+	s := New(cfg(), 4, est)
+	a := s.Enqueue(learned, t0)
+	if got := s.Admit(t0, 100000); len(got) != 1 || got[0] != a {
+		t.Fatalf("first admit %v", got)
+	}
+	s.Enqueue(Request{Command: "b", Weight: 1}, t0)
+	// Past the warmup, the learned job reports 400 MB of its 2400 MB peak:
+	// 2000 MB may still come, so 2500 free leaves too little for 1000.
+	s.Report(a.ID, 400)
+	if got := s.Admit(t0.Add(time.Minute), 2500); len(got) != 0 {
+		t.Fatalf("admitted next to a job that is still growing")
+	}
+	// Once it has grown, its memory is in the reading.
+	s.Report(a.ID, 2300)
+	if got := s.Admit(t0.Add(2*time.Minute), 1200); len(got) != 1 {
+		t.Fatalf("not admitted after the job reached its peak")
+	}
+}
+
+func TestReportIgnoresUnknownJobs(t *testing.T) {
+	s := New(cfg(), 1, nil)
+	s.Report(42, 100)
+	if snap := s.Snapshot(); len(snap.Running) != 0 {
+		t.Fatalf("report created a job: %+v", snap)
+	}
+}
+
 func TestLearningChangesWeight(t *testing.T) {
 	r := Request{Command: "pnpm test", Dir: "/repo", Weight: 2}
 	est := fakeEstimator{r.Key(): {200, 300, 250}}

@@ -32,6 +32,9 @@ type Process interface {
 	Wait() error
 	// PeakMB is the peak memory of the tree seen so far; final after Wait.
 	PeakMB() uint64
+	// CurrentMB is the memory of the tree now, measured the same way as
+	// PeakMB; 0 when unknown.
+	CurrentMB() uint64
 	// KillTree terminates the root process and its descendants.
 	KillTree() error
 }

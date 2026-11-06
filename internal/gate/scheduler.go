@@ -63,6 +63,10 @@ type Job struct {
 	Samples    int       `json:"samples"`
 	Queued     time.Time `json:"queued"`
 	Started    time.Time `json:"started,omitzero"`
+	// CurrentMB is the memory the running job reported last; Reported is
+	// false until it reports (clients before this field never do).
+	CurrentMB uint64 `json:"currentMB,omitempty"`
+	Reported  bool   `json:"reported,omitempty"`
 }
 
 // Estimator returns the recent peaks recorded for a key.
@@ -128,17 +132,30 @@ func (s *Scheduler) Remove(id uint64) bool {
 	return false
 }
 
+// Report records the current memory of a running job.
+func (s *Scheduler) Report(id uint64, currentMB uint64) {
+	if j, ok := s.running[id]; ok {
+		j.CurrentMB = currentMB
+		j.Reported = true
+	}
+}
+
 // Admit moves waiting jobs into running while slots and free memory allow.
 // The queue head blocks later jobs, so a heavy job is never starved by a
 // stream of lighter ones. When nothing runs, the head is always admitted so
 // a job larger than the machine still makes progress.
+//
+// The free memory reading already contains what running jobs use now, so
+// only what they may still grow to is held back: a learned job that reports
+// its memory holds its remaining headroom (estimate - current), since a type
+// check or test run can keep growing for a minute; other jobs hold their
+// estimate during the warmup only, as their estimate is just the weight
+// hint and would hold back too much for their whole run.
 func (s *Scheduler) Admit(now time.Time, freeMB uint64) []*Job {
 	used := s.used()
-	var warming uint64
+	var reserved uint64
 	for _, j := range s.running {
-		if now.Sub(j.Started) < s.cfg.Warmup {
-			warming += j.EstimateMB
-		}
+		reserved += s.reserve(j, now)
 	}
 	var admitted []*Job
 	for len(s.waiting) > 0 {
@@ -147,7 +164,7 @@ func (s *Scheduler) Admit(now time.Time, freeMB uint64) []*Job {
 			if used+j.Slots > s.slots {
 				break
 			}
-			if freeMB < warming+j.EstimateMB {
+			if freeMB < reserved+j.EstimateMB {
 				break
 			}
 		}
@@ -155,10 +172,25 @@ func (s *Scheduler) Admit(now time.Time, freeMB uint64) []*Job {
 		j.Started = now
 		s.running[j.ID] = j
 		used += j.Slots
-		warming += j.EstimateMB
+		reserved += j.EstimateMB
 		admitted = append(admitted, j)
 	}
 	return admitted
+}
+
+// reserve is the memory a running job may still take beyond the free
+// memory reading.
+func (s *Scheduler) reserve(j *Job, now time.Time) uint64 {
+	if j.Reported && j.Samples >= s.cfg.MinSamples {
+		if j.CurrentMB >= j.EstimateMB {
+			return 0
+		}
+		return j.EstimateMB - j.CurrentMB
+	}
+	if now.Sub(j.Started) < s.cfg.Warmup {
+		return j.EstimateMB
+	}
+	return 0
 }
 
 // Reap removes running jobs whose process no longer exists and returns them.

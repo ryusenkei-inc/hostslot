@@ -37,10 +37,11 @@ func (nativeTracker) Start(cmd *exec.Cmd) (Process, error) {
 }
 
 type pollProcess struct {
-	cmd  *exec.Cmd
-	peak atomic.Uint64
-	done chan struct{}
-	once sync.Once
+	cmd     *exec.Cmd
+	peak    atomic.Uint64
+	current atomic.Uint64
+	done    chan struct{}
+	once    sync.Once
 }
 
 func (p *pollProcess) Pid() int { return p.cmd.Process.Pid }
@@ -50,10 +51,12 @@ func (p *pollProcess) poll() {
 	defer t.Stop()
 	for {
 		if rss, _ := treeRSS(p.Pid()); rss > 0 {
+			p.current.Store(rss / mib)
 			p.raise(rss / mib)
 		}
 		select {
 		case <-p.done:
+			p.current.Store(0)
 			return
 		case <-t.C:
 		}
@@ -83,6 +86,8 @@ func (p *pollProcess) Wait() error {
 }
 
 func (p *pollProcess) PeakMB() uint64 { return p.peak.Load() }
+
+func (p *pollProcess) CurrentMB() uint64 { return p.current.Load() }
 
 func (p *pollProcess) KillTree() error {
 	_, pids := treeRSS(p.Pid())

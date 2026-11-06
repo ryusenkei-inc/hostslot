@@ -15,7 +15,7 @@ jobgate does, across tools and repositories. It works the same from a plain term
 ## How it works
 
 - **Slots:** `floor((total memory x 0.6 - reserve) / cost of a weight-1 job)`, capped by the CPU count and at least 1. With the defaults (1 GB reserve, 2 GB per weight-1 job), a 16 GB machine has 4 slots.
-- **Admission:** a job needs free slots for its weight and enough free memory for its estimated peak. Memory of jobs admitted in the last 15 seconds is subtracted, since they haven't grown yet. When nothing runs, the next job is always admitted.
+- **Admission:** a job needs free slots for its weight and enough free memory for its estimated peak. The free-memory reading already contains what running jobs use now, so only what they may still grow to is held back: a learned job reports its memory every 2 seconds and holds its remaining headroom (learned peak minus current), since a type check can keep growing for a minute; a job without enough samples holds its estimate for its first 15 seconds. When nothing runs, the next job is always admitted.
 - **Order:** interactive jobs before background jobs, first come first served within each. The head of the queue blocks later jobs, so a heavy job is never starved by lighter ones.
 - **Learning:** jobgate records the peak memory of each wrapped command, including its child processes, keyed by the command and where it runs: inside a git repository, the repository (shared by all of its worktrees) and the path inside it; elsewhere, the directory. `--as` names the work when the command line varies, such as a wrapper script. After 3 runs, the recent peak replaces the weight hint. A command that turns out light takes 1 slot, even with `--weight 3`.
 - **Inner parallelism:** the wrapped command gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency` and `pnpm_config_workspace_concurrency` (pnpm's `--workspace-concurrency`: pnpm 10 reads the first, pnpm 11 the second), unless `CI` is set or the variable is already set. `JOBGATE_WORKERS` is always set for your own scripts.
@@ -50,7 +50,7 @@ jobgate version
 - `--max-wait 5m` gives up waiting for a slot after 5 minutes (exit `75`, retry later). The command never runs without a slot.
 - `--timeout 2m` stops the command's process tree after it has run for 2 minutes (exit `124`). A stopped run is not learned.
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
-- `status` shows the slots, free memory, running jobs (command, weight, estimated memory) and waiting jobs. Without a daemon, it shows how many slot locks are held.
+- `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
 - `hook claude` is a Claude Code hook (see [Claude Code](#claude-code)).
 
@@ -65,12 +65,12 @@ cpus:    8
 tracker: job object (peak committed memory)
 
 running (1)
-  ID  WEIGHT  EST MB  SAMPLES  PRIORITY     AGE  COMMAND  DIR
-  4   1       2048    0        interactive  2s   sleep 7  C:\src\app
+  ID  WEIGHT  EST MB  NOW MB  SAMPLES  PRIORITY     AGE  COMMAND  DIR
+  4   1       2048    6       0        interactive  2s   sleep 7  C:\src\app
 
 waiting (1)
-  ID  WEIGHT  EST MB  SAMPLES  PRIORITY    AGE  COMMAND  DIR
-  5   1       2048    0        background  1s   sleep 1  C:\src\app
+  ID  WEIGHT  EST MB  NOW MB  SAMPLES  PRIORITY    AGE  COMMAND  DIR
+  5   1       2048    -       0        background  1s   sleep 1  C:\src\app
 ```
 
 ## Integration
@@ -164,7 +164,7 @@ The data directory holds `config.json`, `samples.json` (the last 10 peaks per co
 | --- | --- | --- | --- |
 | Memory (total, free) | `/proc/meminfo` `MemAvailable`, limited by cgroup v2 `memory.max` | `sysctl` `hw.memsize` and page counters (free, speculative, purgeable, file-backed), `vm_stat` as a fallback | `GlobalMemoryStatusEx` |
 | CPUs | `runtime.NumCPU`, limited by cgroup v2 `cpu.max` | `runtime.NumCPU` | `runtime.NumCPU` |
-| Peak memory of the process tree | Sum of resident memory over `/proc`, polled every 250 ms, plus `ru_maxrss` | Sum of resident memory from `ps`, polled every 250 ms, plus `ru_maxrss` | Job Object peak committed memory |
+| Peak and current memory of the process tree | Sum of resident memory over `/proc`, polled every 250 ms, plus `ru_maxrss` | Sum of resident memory from `ps`, polled every 250 ms, plus `ru_maxrss` | Job Object peak and current committed memory |
 | Kill the process tree | Signals to descendants found in `/proc` | Signals to descendants found with `ps` | `TerminateJobObject` |
 | IPC | Unix socket (mode 0600) | Unix socket (mode 0600) | Named pipe, current user only |
 | Machine-wide lock | `flock` | `flock` | Named mutex (per logon session) |

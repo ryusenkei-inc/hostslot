@@ -90,6 +90,39 @@ func TestTrackerTreePeakAndExitCode(t *testing.T) {
 	}
 }
 
+func TestTrackerCurrentMemory(t *testing.T) {
+	p := testPlatform(t)
+	if !p.Tracker.Capabilities().TreeMemory {
+		t.Skip("tree memory not supported")
+	}
+	cmd := exec.Command(self(t))
+	cmd.Env = append(os.Environ(), "JOBGATE_TEST_HELPER=tree")
+	proc, err := p.Tracker.Start(cmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waited := make(chan struct{})
+	go func() {
+		_ = proc.Wait()
+		close(waited)
+	}()
+	var seen uint64
+	for running := true; running; {
+		seen = max(seen, proc.CurrentMB())
+		select {
+		case <-waited:
+			running = false
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	if seen < 80 {
+		t.Fatalf("current memory peaked at %d MB while running, want >= 80 MB", seen)
+	}
+	if now := proc.CurrentMB(); now != 0 {
+		t.Fatalf("current memory %d MB after exit, want 0", now)
+	}
+}
+
 func TestTrackerKillTree(t *testing.T) {
 	p := testPlatform(t)
 	cmd := exec.Command(self(t))

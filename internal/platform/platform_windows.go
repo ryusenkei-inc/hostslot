@@ -107,6 +107,29 @@ func (p *jobProcess) PeakMB() uint64 {
 	return max(p.peak, p.queryLocked())
 }
 
+// jobObjectMemoryUsageInformation is JobObjectMemoryUsageInformation
+// (Windows 10+), missing from x/sys/windows.
+const jobObjectMemoryUsageInformation = 28
+
+// jobMemoryUsage is JOBOBJECT_MEMORY_USAGE_INFORMATION.
+type jobMemoryUsage struct {
+	JobMemory         uint64
+	PeakJobMemoryUsed uint64
+}
+
+func (p *jobProcess) CurrentMB() uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.job == 0 {
+		return 0
+	}
+	var info jobMemoryUsage
+	if err := windows.QueryInformationJobObject(p.job, jobObjectMemoryUsageInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info)), nil); err != nil {
+		return 0
+	}
+	return info.JobMemory / mib
+}
+
 func (p *jobProcess) queryLocked() uint64 {
 	if p.job == 0 {
 		return 0
