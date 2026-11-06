@@ -26,11 +26,17 @@ jobgate does, across tools and repositories. It works the same from a plain term
 
 ## Install
 
+Download the archive for your OS and CPU (Linux, macOS and Windows; amd64 and arm64) from [Releases](https://github.com/ryusenkei-inc/jobgate/releases), check it against `checksums.txt`, and put `jobgate` (`jobgate.exe`) on your `PATH`.
+
+Or build it with Go 1.26 or later:
+
 ```sh
 go install github.com/ryusenkei-inc/jobgate/cmd/jobgate@latest
 ```
 
-Requires Go 1.26 or later. Make sure `$(go env GOPATH)/bin` is on your `PATH`.
+Make sure `$(go env GOPATH)/bin` is on your `PATH`. Then register the Claude Code hook if you use it: `jobgate setup claude` (see [Claude Code](#claude-code)).
+
+To upgrade, replace the binary. On Windows a running daemon keeps `jobgate.exe` open: rename the old file first, then put the new one in place. The next `jobgate run` retires the old daemon.
 
 ## Usage
 
@@ -220,6 +226,8 @@ node scripts/env.ts run <cmd>  # run a command with .env loaded
 pnpm env:push [--dry-run]      # push .env values to GitHub Variables / Secrets
 pnpm repo:settings             # apply GitHub repository settings (squash merge only)
 ```
+
+Releases: pushing a `v*` tag runs `.github/workflows/release.yaml`, which tests and publishes binaries with GoReleaser (`.goreleaser.yaml`). `jobgate version` reports the tag through Go's VCS stamping.
 
 CI (`.github/workflows/ci.yaml`) runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles for all three, and runs the TypeScript typecheck and Vitest, prose, PR title and secret checks.
 
