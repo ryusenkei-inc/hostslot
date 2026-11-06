@@ -67,7 +67,7 @@ The OS's own tools don't queue: cgroups and Job Object limits make a capped buil
 | Guard | What happens | Exit code |
 | --- | --- | --- |
 | Memory ceiling | A job whose process tree passes `jobCeilingFraction` of total memory (default 75%) is stopped | `77` |
-| Out of memory | When free memory falls below half of `reserveMB`, the largest background job is stopped (at most one per 10 s; never interactive jobs) | `77` |
+| Out of memory | When free memory falls below half of `reserveMB`, the largest background job is stopped (at most one per 10 s; never interactive jobs, nor jobs using less than a quarter of `reserveMB`, which would free next to nothing) | `77` |
 | Cleanup | Processes a job leaves running (test workers, browsers) are stopped when it ends; `--keep-children` keeps them | — |
 | Wait limit | `--max-wait` gives up on waiting; the command never runs without a slot | `75` |
 | Timeout | `--timeout` stops the job after it has run that long | `124` |

@@ -233,6 +233,40 @@ func TestNearlyOutOfMemoryStopsTheLargestBackgroundJob(t *testing.T) {
 	small.Release(nil)
 }
 
+func TestNearlyOutOfMemoryLeavesSmallJobsAlone(t *testing.T) {
+	dir := t.TempDir()
+	p := platform.Native(platform.Paths{Data: dir, Runtime: dir})
+	m := &dropMetrics{}
+	srv := &Server{
+		Metrics: m,
+		Alive:   func(int) bool { return true },
+		Store:   store.Open(filepath.Join(dir, "samples.json")),
+		LoadConfig: func() (gate.Config, error) {
+			return gate.Config{Slots: 2, CostMB: 100, ReserveMB: 1000}.Normalize(), nil
+		},
+		Interval: 20 * time.Millisecond,
+	}
+	l, err := p.IPC.Listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go srv.Serve(l)
+	t.Cleanup(func() { l.Close() })
+
+	ch, _ := acquireAsync(t, p, gate.Request{Command: "lint", Dir: "/r", Weight: 1, Priority: gate.Background, PID: 1})
+	small := waitLease(t, ch)
+	small.Report(6)
+	time.Sleep(100 * time.Millisecond)
+
+	m.low.Store(true)
+	select {
+	case <-small.Stopped():
+		t.Fatal("a 6 MB job was stopped; it would free nothing")
+	case <-time.After(500 * time.Millisecond):
+	}
+	small.Release(nil)
+}
+
 func TestStatusListsRecentJobsWithTheirOutcome(t *testing.T) {
 	p, st := startServer(t, 1)
 	req := gate.Request{Command: "build", Dir: "/r", Weight: 1, PID: 1}

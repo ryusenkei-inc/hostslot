@@ -203,13 +203,15 @@ const stopCooldown = 10 * time.Second
 // stopLargestLocked is the last line of defence: when free memory falls
 // below half the reserve, the largest background job is asked to stop.
 // Jobs under their own ceilings, plus apps outside loadslot, can still use
-// up memory together.
+// up memory together. When apps outside loadslot are the cause, a job using
+// less than a quarter of the reserve would free next to nothing, so it keeps
+// running.
 func (s *Server) stopLargestLocked() {
 	if s.memory.FreeMB >= s.reserve/2 || time.Since(s.lastStop) < stopCooldown {
 		return
 	}
-	id, _, ok := s.sched.Largest()
-	if !ok {
+	id, mb, ok := s.sched.Largest()
+	if !ok || mb < s.reserve/4 {
 		return
 	}
 	if ch, found := s.stops[id]; found {
