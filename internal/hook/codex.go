@@ -22,6 +22,11 @@ type CodexOptions struct {
 	// PowerShell is set on Windows, where Codex runs commands in PowerShell:
 	// the prefix is then written in PowerShell syntax.
 	PowerShell bool
+	// Dev matches dev-server commands, run with `hostslot serve` on their
+	// worktree's port (DefaultDevServer when nil).
+	Dev *regexp.Regexp
+	// DevContext, when set, tells Codex where the dev servers listen.
+	DevContext DevContext
 }
 
 type codexInput struct {
@@ -50,9 +55,10 @@ func Codex(in io.Reader, out io.Writer, o CodexOptions) error {
 		return nil
 	}
 	command, _ := ev.ToolInput["command"].(string)
-	rewritten, labels, ok := GateInPlace(command, ev.Cwd, o.Heavy, func(label string, _ int) string {
+	rules, prefix, devLabels := gateRules(o.Heavy, o.Dev, ev.Cwd, func(label string, _ int) string {
 		return codexPrefix(o.Exe, label, o.Weight, o.PowerShell)
-	})
+	}, codexServePrefix(o.Exe, o.PowerShell))
+	rewritten, labels, ok := GateInPlace(command, ev.Cwd, rules, prefix)
 	if !ok {
 		return nil
 	}
@@ -61,16 +67,29 @@ func Codex(in io.Reader, out io.Writer, o CodexOptions) error {
 		input[k] = v
 	}
 	input["command"] = rewritten
+	output := map[string]any{
+		"hookEventName":            "PreToolUse",
+		"permissionDecision":       "allow",
+		"permissionDecisionReason": "hostslot: schedules " + strings.Join(labels, ", ") + " on this machine",
+		"updatedInput":             input,
+	}
+	if c := devContextFor(o.DevContext, command, ev.Cwd, *devLabels); c != "" {
+		output["additionalContext"] = c
+	}
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
-	return enc.Encode(map[string]any{
-		"hookSpecificOutput": map[string]any{
-			"hookEventName":            "PreToolUse",
-			"permissionDecision":       "allow",
-			"permissionDecisionReason": "hostslot: waits for room on this machine before running " + strings.Join(labels, ", "),
-			"updatedInput":             input,
-		},
-	})
+	return enc.Encode(map[string]any{"hookSpecificOutput": output})
+}
+
+// codexServePrefix is what goes before a dev-server command of Codex.
+func codexServePrefix(exe string, powerShell bool) string {
+	if !powerShell {
+		return shellExe(exe) + " serve -- "
+	}
+	if exe == "" || exe == "hostslot" {
+		return "hostslot serve -- "
+	}
+	return "& " + powerShellQuote(filepath.ToSlash(exe)) + " serve -- "
 }
 
 // codexPrefix is what goes before a heavy command of Codex: a background

@@ -217,9 +217,9 @@ func cmdHook(args []string) int {
 	}
 	var err error
 	if agent == "claude" {
-		err = hook.Claude(os.Stdin, os.Stdout, hook.ClaudeOptions{Heavy: heavy, Weight: *weight, Exe: hookExe()})
+		err = hook.Claude(os.Stdin, os.Stdout, hook.ClaudeOptions{Heavy: heavy, Weight: *weight, Exe: hookExe(), DevContext: devContext})
 	} else {
-		o := hook.CodexOptions{Heavy: heavy, Weight: *weight, Exe: hookExe(), PowerShell: runtime.GOOS == "windows"}
+		o := hook.CodexOptions{Heavy: heavy, Weight: *weight, Exe: hookExe(), PowerShell: runtime.GOOS == "windows", DevContext: devContext}
 		err = hook.Codex(os.Stdin, os.Stdout, o)
 	}
 	if err != nil {

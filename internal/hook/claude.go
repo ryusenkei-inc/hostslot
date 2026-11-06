@@ -36,6 +36,11 @@ type ClaudeOptions struct {
 	// from the PATH when empty). An absolute path works without hostslot on
 	// the PATH and skips shims, which cost hundreds of milliseconds a call.
 	Exe string
+	// Dev matches dev-server commands, run with `hostslot serve` on their
+	// worktree's port (DefaultDevServer when nil).
+	Dev *regexp.Regexp
+	// DevContext, when set, tells Claude where the dev servers listen.
+	DevContext DevContext
 }
 
 type claudeInput struct {
@@ -45,9 +50,9 @@ type claudeInput struct {
 }
 
 // Claude reads a Claude Code PreToolUse event from in and, when it is a
-// Bash call with a heavy command, writes a response that replaces the
-// command with `hostslot run ... -- sh -c '<command>'`. Other events produce
-// no output, which leaves the call unchanged.
+// Bash call with heavy or dev-server commands, writes a response that puts
+// `hostslot run … --` or `hostslot serve --` before each of them. Other
+// events produce no output, which leaves the call unchanged.
 func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 	var ev claudeInput
 	if err := json.NewDecoder(in).Decode(&ev); err != nil {
@@ -67,9 +72,10 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 		ms, _ := input["timeout"].(float64)
 		budget, toolTimeout = claudeBudget(time.Duration(ms) * time.Millisecond)
 	}
-	rewritten, _, ok := GateInPlace(command, ev.Cwd, o.Heavy, func(label string, count int) string {
+	rules, prefix, devLabels := gateRules(o.Heavy, o.Dev, ev.Cwd, func(label string, count int) string {
 		return claudePrefix(o.Exe, label, o.Weight, budget.share(count))
-	})
+	}, shellExe(o.Exe)+" serve -- ")
+	rewritten, _, ok := GateInPlace(command, ev.Cwd, rules, prefix)
 	if !ok {
 		return nil
 	}
@@ -77,14 +83,23 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 		input["timeout"] = toolTimeout.Milliseconds()
 	}
 	input["command"] = rewritten
+	output := map[string]any{"hookEventName": "PreToolUse", "updatedInput": input}
+	if c := devContextFor(o.DevContext, command, ev.Cwd, *devLabels); c != "" {
+		output["additionalContext"] = c
+	}
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
-	return enc.Encode(map[string]any{
-		"hookSpecificOutput": map[string]any{
-			"hookEventName": "PreToolUse",
-			"updatedInput":  input,
-		},
-	})
+	return enc.Encode(map[string]any{"hookSpecificOutput": output})
+}
+
+func devContextFor(f DevContext, line, dir string, labels []string) string {
+	if f == nil || len(labels) == 0 {
+		return ""
+	}
+	if changesDirectory(line) {
+		dir = ""
+	}
+	return f(dir, labels)
 }
 
 // Heavy returns the commands of a shell command line that match heavy
