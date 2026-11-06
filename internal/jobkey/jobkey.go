@@ -19,9 +19,20 @@ func For(dir, label string) string {
 		if err != nil {
 			rel = "."
 		}
-		return "git:" + filepath.ToSlash(common) + "\n" + filepath.ToSlash(rel) + "\n" + label
+		return "git:" + filepath.ToSlash(canonical(common)) + "\n" + filepath.ToSlash(rel) + "\n" + label
 	}
-	return "dir:" + filepath.ToSlash(dir) + "\n" + label
+	return "dir:" + filepath.ToSlash(canonical(dir)) + "\n" + label
+}
+
+// canonical resolves symlinks and, on Windows, short (8.3) names: git writes
+// the resolved path into a linked worktree's `.git` file, while the main
+// worktree is reached through whatever path the shell used (/var vs
+// /private/var on macOS, RUNNER~1 vs runneradmin on Windows).
+func canonical(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }
 
 // repository finds the worktree that contains dir: its top directory and the

@@ -55,7 +55,7 @@ func TestOutsideARepository(t *testing.T) {
 	if _, _, ok := repository(dir); ok {
 		t.Skip("temp dir is inside a git repository")
 	}
-	if got, want := For(dir, "go test"), "dir:"+filepath.ToSlash(dir)+"\ngo test"; got != want {
+	if got, want := For(dir, "go test"), "dir:"+filepath.ToSlash(canonical(dir))+"\ngo test"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
