@@ -3,6 +3,7 @@
 
 /** One job in `loadslot status --json`. */
 export type Job = {
+  id?: number;
   command: string;
   key?: string;
   source?: string;
@@ -79,8 +80,9 @@ function label(j: Job): string {
   return name.length > 60 ? `${name.slice(0, 57)}...` : name;
 }
 
+// MB under 1 GB, so a small job doesn't read as 0.0 GB.
 function gb(mb: number): string {
-  return `${(mb / 1024).toFixed(1)} GB`;
+  return mb < 1024 ? `${Math.round(mb)} MB` : `${(mb / 1024).toFixed(1)} GB`;
 }
 
 function age(since: string | undefined, now: number): string {
