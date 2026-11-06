@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ryusenkei-inc/hostslot/internal/platform"
@@ -91,6 +92,36 @@ func cmdServe(args []string) int {
 		fmt.Fprintf(os.Stderr, "hostslot: %v\n", err)
 	}
 	return code
+}
+
+// devContext tells an agent where the dev servers its command starts will
+// listen, assigning their ports now: `hostslot serve` gets the same ones.
+func devContext(dir string, labels []string) string {
+	const unknown = "Hostslot runs dev servers on this worktree's own port and prints it first (hostslot: NAME on http://localhost:PORT). Use that URL, not the tool's default port."
+	if dir == "" {
+		return unknown
+	}
+	p, err := nativePlatform()
+	if err != nil || p.Paths.Ensure() != nil {
+		return unknown
+	}
+	unlock, err := lockPorts(p)
+	if err != nil {
+		return unknown
+	}
+	defer unlock()
+	reg := ports.Open(filepath.Join(p.Paths.Data, ports.FileName))
+	var where []string
+	for _, label := range labels {
+		plan := ports.Detect(strings.Fields(label), dir)
+		port, err := reg.Assign(ports.For(dir, plan.Name), plan.Default, time.Now())
+		if err != nil {
+			return unknown
+		}
+		where = append(where, fmt.Sprintf("`%s` (%s) on http://localhost:%d (PORT=%d)", label, plan.Name, port, port))
+	}
+	return "Hostslot runs this worktree's dev servers on their own ports: " + strings.Join(where, "; ") +
+		". Use these URLs, not the tools' default ports, in browsers, curl and tests. If an app listens elsewhere, make it read PORT."
 }
 
 // holdFixed takes the machine-wide lease of a fixed port for the life of
