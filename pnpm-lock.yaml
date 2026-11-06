@@ -9,11 +9,11 @@ importers:
   .:
     devDependencies:
       '@ryusenkei/conventions':
-        specifier: ^0.5.2
-        version: 0.5.2
+        specifier: ^0.6.0
+        version: 0.6.0
       '@ryusenkei/prose-lint':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.0
+        version: 0.2.0
       '@types/cross-spawn':
         specifier: ^6.0.6
         version: 6.0.6
@@ -146,13 +146,13 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@ryusenkei/conventions@0.5.2':
-    resolution: {integrity: sha512-aM23nay9Z1qIw1MtgC0HSDxoAZRJdfeVqaIhTBj4wxjS+dmoMlKH1XP+11C66ftvT9TrbKhvjV6vN9yt+jcChQ==}
+  '@ryusenkei/conventions@0.6.0':
+    resolution: {integrity: sha512-gUxL9NSnqeplTurEgMsqkwkrQB96Jib1RwcuM62mEEqKtPY2laaTxc6supuJ7BEPNYNLPCXZxIiVuGOMXl8lsg==}
     engines: {node: '>=24'}
     hasBin: true
 
-  '@ryusenkei/prose-lint@0.1.0':
-    resolution: {integrity: sha512-jIQ7Y2/cff5Js1IqDhEj7vT/ncfwbIqcX1Cz/VeKIi0y0pilvDjMzUhKNBgrVOhSJVWDYnqEmxYW4xErYISpdw==}
+  '@ryusenkei/prose-lint@0.2.0':
+    resolution: {integrity: sha512-HHQpQnaKZX5BGUdMFBb3Uu+hv28lqaL0p8VuHtWnbdWrTcQao4/gykCeavWuGkpPg1W+NmReZqj0GgtpICR+JQ==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -523,11 +523,11 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@ryusenkei/conventions@0.5.2':
+  '@ryusenkei/conventions@0.6.0':
     dependencies:
-      '@ryusenkei/prose-lint': 0.1.0
+      '@ryusenkei/prose-lint': 0.2.0
 
-  '@ryusenkei/prose-lint@0.1.0': {}
+  '@ryusenkei/prose-lint@0.2.0': {}
 
   '@types/chai@5.2.3':
     dependencies:

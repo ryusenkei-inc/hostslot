@@ -17,8 +17,8 @@
     "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
-    "@ryusenkei/conventions": "^0.5.2",
-    "@ryusenkei/prose-lint": "^0.1.0",
+    "@ryusenkei/conventions": "^0.6.0",
+    "@ryusenkei/prose-lint": "^0.2.0",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^26.6.1",
     "cross-spawn": "^7.0.6",
