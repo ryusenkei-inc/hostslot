@@ -173,7 +173,7 @@ func TestWithWorkers(t *testing.T) {
 	if !strings.Contains(joined, "VITEST_MAX_WORKERS=9") || strings.Contains(joined, "VITEST_MAX_WORKERS=3") {
 		t.Fatalf("existing value overwritten: %v", env)
 	}
-	if !strings.Contains(joined, "npm_config_workspace_concurrency=3") || !strings.Contains(joined, "JOBGATE_WORKERS=3") {
+	if !strings.Contains(joined, "npm_config_workspace_concurrency=3") || !strings.Contains(joined, "pnpm_config_workspace_concurrency=3") || !strings.Contains(joined, "JOBGATE_WORKERS=3") {
 		t.Fatalf("missing vars: %v", env)
 	}
 	ci := strings.Join(withWorkers([]string{"CI=true"}, 3), " ")
