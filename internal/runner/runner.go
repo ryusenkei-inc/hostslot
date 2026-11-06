@@ -34,7 +34,15 @@ type Options struct {
 	NoDaemon bool
 	// Disable runs the command without the gate (JOBGATE_DISABLE=1).
 	Disable bool
+	// Nested runs the command without the gate because an outer job already
+	// holds a slot (JOBGATE_JOB is set). Waiting for a second slot could
+	// deadlock when the outer job holds the last one.
+	Nested bool
 }
+
+// JobVar marks the environment of a gated command, so jobgate runs nested
+// in it pass through.
+const JobVar = "JOBGATE_JOB"
 
 // InnerParallelismVars are set to the job's worker share unless CI is set
 // or the variable is already set.
@@ -46,7 +54,7 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	if len(o.Args) == 0 {
 		return 2, errors.New("no command")
 	}
-	if o.Disable {
+	if o.Disable || o.Nested {
 		return execute(p, o, os.Environ(), nil)
 	}
 	cfg, err := config.Load(p.Paths.Data)
@@ -65,7 +73,7 @@ func Run(p *platform.Platform, o Options) (int, error) {
 		return 2, err
 	}
 	workers := gate.Workers(l.cpus, l.job.Slots, l.slots)
-	env := withWorkers(os.Environ(), workers)
+	env := append(withWorkers(os.Environ(), workers), JobVar+"=1")
 	start := time.Now()
 	var peak uint64
 	code, err := execute(p, o, env, &peak)

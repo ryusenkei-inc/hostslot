@@ -122,6 +122,7 @@ func cmdRun(args []string) int {
 		Stderr:   os.Stderr,
 		NoDaemon: os.Getenv("JOBGATE_NO_DAEMON") == "1",
 		Disable:  os.Getenv("JOBGATE_DISABLE") == "1",
+		Nested:   os.Getenv(runner.JobVar) != "",
 	})
 	if err != nil {
 		return fail(err)
