@@ -76,7 +76,9 @@ func pathCheck(exe string) check {
 	if sameFile(onPath, exe) {
 		return check{Level: "ok", Text: "on the PATH as " + onPath}
 	}
-	return check{Level: "warn", Text: "loadslot on the PATH (" + onPath + ") is another file than this one. Remove the copy you don't use, or ignore this for a package manager's shim"}
+	// Typical after updating from the Orca panel over a copy installed by
+	// hand: the plugin installs into its own directory.
+	return check{Level: "warn", Text: fmt.Sprintf("loadslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe))}
 }
 
 func daemonCheck(p *platform.Platform) check {
