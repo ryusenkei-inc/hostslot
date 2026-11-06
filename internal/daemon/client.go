@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/ryusenkei-inc/jobgate/internal/gate"
@@ -46,6 +47,11 @@ func Spawn(p *platform.Platform) error {
 	exe, err := os.Executable()
 	if err != nil {
 		return err
+	}
+	// A daemon started from a `go run` binary keeps the temp file open, so go
+	// cannot delete it and exits with an error.
+	if strings.Contains(filepath.ToSlash(exe), "/go-build") {
+		return errors.New("not starting a daemon from a `go run` build")
 	}
 	if err := p.Paths.Ensure(); err != nil {
 		return err
