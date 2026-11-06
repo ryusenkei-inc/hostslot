@@ -208,8 +208,14 @@ function Offer({ v }: { v: View }) {
         </Text>
       ) : null}
       {o.result ? (
-        <Callout tone={o.result.ok ? 'success' : 'danger'} title={o.result.ok ? 'Done' : 'Could not finish'}>
-          <Text size="sm">{o.result.text}</Text>
+        <Callout tone={o.result.ok ? 'success' : 'danger'} title={o.result.title}>
+          {o.result.items.length > 0 ? <KeyValue label={o.result.title} items={o.result.items} /> : null}
+          {o.result.text ? <Text size="sm">{o.result.text}</Text> : null}
+        </Callout>
+      ) : null}
+      {o.result?.next ? (
+        <Callout tone="warning" title="One more step">
+          <Text size="sm">{o.result.next}</Text>
         </Callout>
       ) : null}
     </Stack>

@@ -236,6 +236,7 @@ func cmdSetup(args []string) int {
 	remove := fs.Bool("remove", false, "remove loadslot's hooks instead of adding them")
 	dryRun := fs.Bool("dry-run", false, "report what would change without writing")
 	path := fs.String("settings", "", "hooks file (only with an agent; default: the agent's user-level file)")
+	asJSON := fs.Bool("json", false, "print what changed as JSON (for integrations such as the Orca plugin)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -247,7 +248,12 @@ func cmdSetup(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
-	done := 0
+	var report setupReport
+	say := func(format string, a ...any) {
+		if !*asJSON {
+			fmt.Printf(format+"\n", a...)
+		}
+	}
 	for _, a := range agents {
 		if !named && !setup.Detected(a) {
 			continue
@@ -272,23 +278,43 @@ func cmdSetup(args []string) int {
 		if *dryRun && res != setup.Unchanged {
 			verb = "would have " + verb
 		}
-		fmt.Printf("%s: %s\n", file, verb)
+		say("%s: %s", file, verb)
 		if a == setup.Codex && !*dryRun && (res == setup.Added || res == setup.Updated) {
-			fmt.Println("Codex runs a new or changed hook only after you trust it: start Codex and review it with /hooks. It gates sessions without approvals and outside the sandbox (full access)")
+			say("Codex runs a new or changed hook only after you trust it: start Codex and review it with /hooks. It gates sessions without approvals and outside the sandbox (full access)")
 		}
-		done++
+		report.Agents = append(report.Agents, agentResult{Agent: string(a), File: file, Result: res.String()})
 	}
-	if done == 0 {
-		fmt.Println("No supported agent found (Claude Code, Codex). Install one, or name it: loadslot setup claude")
+	if len(report.Agents) == 0 {
+		say("No supported agent found (Claude Code, Codex). Install one, or name it: loadslot setup claude")
 	}
 	// Setup follows an install or upgrade, so an older daemon is retired now
 	// rather than at the next run (its running jobs still finish).
 	if !*remove && !*dryRun {
 		if p, err := nativePlatform(); err == nil && daemon.RetireOlder(p, daemon.Version()) {
-			fmt.Println("Retired the older daemon; the next loadslot run starts this version's")
+			report.Retired = true
+			say("Retired the older daemon; the next loadslot run starts this version's")
 		}
 	}
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(report)
+	}
 	return 0
+}
+
+// setupReport is `loadslot setup --json`.
+type setupReport struct {
+	Agents  []agentResult `json:"agents"`
+	Retired bool          `json:"retired"`
+}
+
+// agentResult is what setup did to one agent's hooks file: unchanged,
+// added, updated or removed.
+type agentResult struct {
+	Agent  string `json:"agent"`
+	File   string `json:"file"`
+	Result string `json:"result"`
 }
 
 // setupExe is the loadslot path to write into hook settings: a stable path

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
-import { assetName, dataDir, install, installedPath, offer, parseChecksums } from './install.ts';
+import { assetName, dataDir, install, installedPath, offer, parseChecksums, setupItems } from './install.ts';
 
 it('names the bare executable of each release as GoReleaser publishes it', () => {
   expect(assetName('0.5.0', 'win32', 'x64')).toBe('loadslot_0.5.0_windows_amd64.exe');
@@ -38,6 +38,30 @@ it('offers to install when loadslot is missing or older, and setup when doctor s
   expect(offer({ ...base, found: false, plugin: '' })).toEqual({});
   const problems = [{ level: 'warn' as const, text: 'claude: hook not registered', fix: 'setup' as const }];
   expect(offer({ ...base, found: true, binary: '0.5.0', problems })).toEqual({ setup: true });
+});
+
+it('turns setup --json into items, with the Codex trust step', () => {
+  const out = JSON.stringify({
+    agents: [
+      { agent: 'claude', file: '/h/.claude/settings.json', result: 'unchanged' },
+      { agent: 'codex', file: '/h/.codex/hooks.json', result: 'added' },
+    ],
+    retired: true,
+  });
+  expect(setupItems(out)).toEqual({
+    items: [
+      { label: 'Claude Code', value: 'already set up' },
+      { label: 'Codex', value: 'hook added' },
+      { label: 'Daemon', value: 'older one retired; the next run starts this version' },
+    ],
+    next: 'Open Codex and trust the loadslot hook with /hooks. Until then Codex skips it.',
+  });
+  expect(setupItems(JSON.stringify({ agents: [{ agent: 'claude', result: 'added' }], retired: false }))).toEqual({
+    items: [{ label: 'Claude Code', value: 'hook added' }],
+  });
+  expect(setupItems('/h/.claude/settings.json: already up to date\n')).toEqual({
+    items: [{ label: 'Setup', value: '/h/.claude/settings.json: already up to date' }],
+  });
 });
 
 function fakeFetch(files: Record<string, Buffer | string>) {
