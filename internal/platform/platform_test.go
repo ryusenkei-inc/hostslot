@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -35,8 +37,60 @@ func TestMain(m *testing.M) {
 	case "sleep":
 		time.Sleep(time.Minute)
 		os.Exit(0)
+	case "orphan":
+		// Leaves a sleeping child behind and prints its pid. It stays long
+		// enough for the tracker to see the child.
+		exe, _ := os.Executable()
+		cmd := exec.Command(exe)
+		cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=sleep")
+		if err := cmd.Start(); err != nil {
+			os.Exit(1)
+		}
+		os.Stdout.WriteString(strconv.Itoa(cmd.Process.Pid) + "\n")
+		time.Sleep(700 * time.Millisecond)
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
+}
+
+func TestTrackerCleansUpLeftovers(t *testing.T) {
+	p := testPlatform(t)
+	if !p.Tracker.Capabilities().TreeMemory {
+		t.Skip("tree tracking not supported")
+	}
+	for _, cleanup := range []bool{true, false} {
+		cmd := exec.Command(self(t))
+		cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=orphan")
+		var out strings.Builder
+		cmd.Stdout = &out
+		proc, err := p.Tracker.Start(cmd, StartOptions{Cleanup: cleanup})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := proc.Wait(); err != nil {
+			t.Fatal(err)
+		}
+		child, err := strconv.Atoi(strings.TrimSpace(out.String()))
+		if err != nil {
+			t.Fatalf("child pid: %q", out.String())
+		}
+		deadline := time.Now().Add(3 * time.Second)
+		for processAlive(child) && time.Now().Before(deadline) {
+			time.Sleep(50 * time.Millisecond)
+		}
+		alive := processAlive(child)
+		if cleanup && alive {
+			t.Fatalf("leftover child %d still running", child)
+		}
+		if !cleanup {
+			if !alive {
+				t.Fatalf("child %d stopped without cleanup", child)
+			}
+			if c, err := os.FindProcess(child); err == nil {
+				_ = c.Kill()
+			}
+		}
+	}
 }
 
 func self(t *testing.T) string {
@@ -76,7 +130,7 @@ func TestTrackerTreePeakAndExitCode(t *testing.T) {
 	}
 	cmd := exec.Command(self(t))
 	cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=tree")
-	proc, err := p.Tracker.Start(cmd)
+	proc, err := p.Tracker.Start(cmd, StartOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +151,7 @@ func TestTrackerCurrentMemory(t *testing.T) {
 	}
 	cmd := exec.Command(self(t))
 	cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=tree")
-	proc, err := p.Tracker.Start(cmd)
+	proc, err := p.Tracker.Start(cmd, StartOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +181,7 @@ func TestTrackerKillTree(t *testing.T) {
 	p := testPlatform(t)
 	cmd := exec.Command(self(t))
 	cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=sleep")
-	proc, err := p.Tracker.Start(cmd)
+	proc, err := p.Tracker.Start(cmd, StartOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

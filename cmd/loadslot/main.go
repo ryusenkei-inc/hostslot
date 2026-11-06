@@ -110,6 +110,7 @@ func cmdRun(args []string) int {
 	source := fs.String("source", os.Getenv("LOADSLOT_SOURCE"), "who starts the job, shown in status (default: $LOADSLOT_SOURCE)")
 	maxWait := fs.Duration("max-wait", 0, "give up waiting for a slot after this long and exit 75 (0 = wait forever)")
 	timeout := fs.Duration("timeout", 0, "stop the command after it has run this long and exit 124 (0 = none)")
+	keepChildren := fs.Bool("keep-children", false, "leave processes the command started running after it exits")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -131,19 +132,20 @@ func cmdRun(args []string) int {
 		return fail(err)
 	}
 	code, err := runner.Run(p, runner.Options{
-		Args:     cmd,
-		Label:    *label,
-		Source:   *source,
-		MaxWait:  *maxWait,
-		Timeout:  *timeout,
-		Weight:   *weight,
-		Priority: priority,
-		Dir:      dir,
-		Stdin:    os.Stdin,
-		Stdout:   os.Stdout,
-		Stderr:   os.Stderr,
-		NoDaemon: os.Getenv("LOADSLOT_NO_DAEMON") == "1",
-		Disable:  os.Getenv("LOADSLOT_DISABLE") == "1",
+		Args:         cmd,
+		Label:        *label,
+		Source:       *source,
+		MaxWait:      *maxWait,
+		Timeout:      *timeout,
+		KeepChildren: *keepChildren,
+		Weight:       *weight,
+		Priority:     priority,
+		Dir:          dir,
+		Stdin:        os.Stdin,
+		Stdout:       os.Stdout,
+		Stderr:       os.Stderr,
+		NoDaemon:     os.Getenv("LOADSLOT_NO_DAEMON") == "1",
+		Disable:      os.Getenv("LOADSLOT_DISABLE") == "1",
 		// JOBGATE_JOB: an outer job of jobgate, the former name, during an upgrade
 		Nested: os.Getenv(runner.JobVar) != "" || os.Getenv("JOBGATE_JOB") != "",
 	})

@@ -59,10 +59,14 @@ func (nativeTracker) Capabilities() Capabilities {
 	return Capabilities{TreeMemory: true, Method: "job object (peak committed memory)"}
 }
 
-func (nativeTracker) Start(cmd *exec.Cmd) (Process, error) {
+func (nativeTracker) Start(cmd *exec.Cmd, o StartOptions) (Process, error) {
 	job, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("CreateJobObject: %w", err)
+	}
+	if err := setJobLimits(job, o); err != nil {
+		windows.CloseHandle(job)
+		return nil, err
 	}
 	if err := cmd.Start(); err != nil {
 		windows.CloseHandle(job)
@@ -82,6 +86,27 @@ func (nativeTracker) Start(cmd *exec.Cmd) (Process, error) {
 		p.job = 0
 	}
 	return p, nil
+}
+
+// setJobLimits applies to every process in the job: a lower priority class
+// for background jobs, and kill-on-close, so closing the job after the root
+// exits stops what it left behind.
+func setJobLimits(job windows.Handle, o StartOptions) error {
+	var info windows.JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+	if o.Background {
+		info.BasicLimitInformation.LimitFlags |= windows.JOB_OBJECT_LIMIT_PRIORITY_CLASS
+		info.BasicLimitInformation.PriorityClass = windows.BELOW_NORMAL_PRIORITY_CLASS
+	}
+	if o.Cleanup {
+		info.BasicLimitInformation.LimitFlags |= windows.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+	}
+	if info.BasicLimitInformation.LimitFlags == 0 {
+		return nil
+	}
+	if _, err := windows.SetInformationJobObject(job, windows.JobObjectExtendedLimitInformation, uintptr(unsafe.Pointer(&info)), uint32(unsafe.Sizeof(info))); err != nil {
+		return fmt.Errorf("SetInformationJobObject: %w", err)
+	}
+	return nil
 }
 
 type jobProcess struct {

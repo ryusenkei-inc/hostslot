@@ -51,7 +51,7 @@ To upgrade, replace the binary. On Windows a running daemon keeps `loadslot.exe`
 
 ```sh
 loadslot run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
-            [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
+            [--max-wait DURATION] [--timeout DURATION] [--keep-children] -- <command> [args...]
 loadslot status [--json]
 loadslot daemon [--idle 10m]
 loadslot hook claude [--weight N] [--match REGEX]
@@ -66,6 +66,8 @@ loadslot version
 - `--as` names the work for learning instead of the command line, e.g. `loadslot run --as "pnpm test" -- sh -c 'pnpm test 2>&1 | tail'`.
 - `--max-wait 5m` gives up waiting for a slot after 5 minutes (exit `75`, retry later). The command never runs without a slot.
 - `--timeout 2m` stops the command's process tree after it has run for 2 minutes (exit `124`). A stopped run is not learned.
+- Background jobs (agents, scripts) run at a lower OS priority: below-normal priority class on Windows, `nice 10` on Linux and macOS. People's editors and terminals stay responsive; interactive jobs keep normal priority.
+- When the command exits, processes it left running (test workers, browsers) are stopped. `--keep-children` leaves them, for commands that start a daemon on purpose.
 - `--source claude` names who started the job (default: `$LOADSLOT_SOURCE`), shown in `status`. The job also records `ORCA_PANE_KEY`, `ORCA_TAB_ID` and `ORCA_WORKTREE_ID` when set, so `status --json` tells which Orca pane a job belongs to.
 - Ctrl+C reaches the command as usual, and loadslot waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held.
@@ -201,7 +203,8 @@ The data directory holds `config.json`, `samples.json` (the last 10 peaks per co
 | Memory (total, free) | `/proc/meminfo` `MemAvailable`, limited by cgroup v2 `memory.max` | `sysctl` `hw.memsize` and page counters (free, speculative, purgeable, file-backed), `vm_stat` as a fallback | `GlobalMemoryStatusEx` |
 | CPUs | `runtime.NumCPU`, limited by cgroup v2 `cpu.max` | `runtime.NumCPU` | `runtime.NumCPU` |
 | Peak and current memory of the process tree | Sum of resident memory over `/proc`, polled every 250 ms, plus `ru_maxrss` | Sum of resident memory from `ps`, polled every 250 ms, plus `ru_maxrss` | Job Object peak and current committed memory |
-| Kill the process tree | Signals to descendants found in `/proc` | Signals to descendants found with `ps` | `TerminateJobObject` |
+| Kill the process tree, clean up leftovers | Signals to descendants found in `/proc` | Signals to descendants found with `ps` | `TerminateJobObject` |
+| Lower priority for background jobs | `setpriority` (nice 10) on the root; descendants inherit it | `setpriority` (nice 10) on the root; descendants inherit it | Job Object below-normal priority class |
 | IPC | Unix socket (mode 0600) | Unix socket (mode 0600) | Named pipe per daemon, current user only (its name is in `daemon.pipe`, so a new daemon can start while a retired one finishes its jobs) |
 | Machine-wide lock | `flock` | `flock` | Named mutex (per logon session) |
 
