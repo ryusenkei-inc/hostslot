@@ -13,7 +13,7 @@ func TestGateInPlace(t *testing.T) {
 		{"cargo test -q; gh pr checks 11 --watch", "[cargo test -q] cargo test -q; gh pr checks 11 --watch"},
 		// cd stays in the agent's shell.
 		{"cd apps/site && pnpm test 2>&1 | tail -20", "cd apps/site && [pnpm test] pnpm test 2>&1 | tail -20"},
-		// Assignments reach the command through loadslot's environment.
+		// Assignments reach the command through hostslot's environment.
 		{"CI=1 FOO=x pnpm test --run", "CI=1 FOO=x [pnpm test --run] pnpm test --run"},
 		{"pnpm lint && pnpm test", "[pnpm lint] pnpm lint && [pnpm test] pnpm test"},
 		{"echo $(go test ./...)", "echo $([go test ./...] go test ./...)"},
@@ -33,8 +33,8 @@ func TestGateInPlaceLeavesLinesAlone(t *testing.T) {
 	for _, line := range []string{
 		"git status",
 		"python - <<'EOF'\nprint('pnpm test')\nEOF",
-		"LOADSLOT_DISABLE=1 pnpm test",
-		"loadslot run -- pnpm test",
+		"HOSTSLOT_DISABLE=1 pnpm test",
+		"hostslot run -- pnpm test",
 		"pnpm test 'unclosed",
 	} {
 		if got, _, ok := GateInPlace(line, "", nil, mark); ok {
@@ -55,5 +55,13 @@ func TestGateInPlaceSharesTheWait(t *testing.T) {
 	b := Budget{MaxWait: 8 * 60e9, Timeout: 2 * 60e9}.share(2)
 	if b.MaxWait != 4*60e9 || b.Timeout != 2*60e9 {
 		t.Fatalf("share: %+v", b)
+	}
+}
+
+func TestGateInPlaceLeavesLinesOfFormerNamesAlone(t *testing.T) {
+	for _, line := range []string{"loadslot run -- pnpm test", "LOADSLOT_DISABLE=1 pnpm test", "jobgate run -- go test ./..."} {
+		if _, _, ok := GateInPlace(line, "", nil, func(string, int) string { return "x " }); ok {
+			t.Fatalf("rewrote %q", line)
+		}
 	}
 }

@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ryusenkei-inc/loadslot/internal/gate"
-	"github.com/ryusenkei-inc/loadslot/internal/platform"
-	"github.com/ryusenkei-inc/loadslot/internal/store"
+	"github.com/ryusenkei-inc/hostslot/internal/gate"
+	"github.com/ryusenkei-inc/hostslot/internal/platform"
+	"github.com/ryusenkei-inc/hostslot/internal/store"
 )
 
 func TestOlder(t *testing.T) {

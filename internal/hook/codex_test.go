@@ -42,16 +42,16 @@ func runCodex(t *testing.T, in string, o CodexOptions) (codexResult, string) {
 func TestCodexGatesHeavyCommandsInPlace(t *testing.T) {
 	res, raw := runCodex(t, codexEvent("cd web && pnpm test; git status", "bypassPermissions"), CodexOptions{})
 	got := res.HookSpecificOutput
-	want := "cd web && loadslot run --weight 1 --priority background --source codex --as 'pnpm test' -- pnpm test; git status"
+	want := "cd web && hostslot run --weight 1 --priority background --source codex --as 'pnpm test' -- pnpm test; git status"
 	if got.PermissionDecision != "allow" || got.UpdatedInput["command"] != want {
 		t.Fatalf("got %s", raw)
 	}
 }
 
 func TestCodexPowerShellPrefix(t *testing.T) {
-	o := CodexOptions{Exe: `C:/Program Files/loadslot/loadslot.exe`, Weight: 2, PowerShell: true}
+	o := CodexOptions{Exe: `C:/Program Files/hostslot/hostslot.exe`, Weight: 2, PowerShell: true}
 	res, raw := runCodex(t, codexEvent(`Set-Location web; go test ./...`, "bypassPermissions"), o)
-	want := `Set-Location web; & 'C:/Program Files/loadslot/loadslot.exe' run --weight 2 --priority background --source codex --as 'go test ./...' -- go test ./...`
+	want := `Set-Location web; & 'C:/Program Files/hostslot/hostslot.exe' run --weight 2 --priority background --source codex --as 'go test ./...' -- go test ./...`
 	if res.HookSpecificOutput.UpdatedInput["command"] != want {
 		t.Fatalf("got %s", raw)
 	}

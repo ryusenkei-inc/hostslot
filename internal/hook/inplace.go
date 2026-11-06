@@ -10,22 +10,22 @@ import (
 
 // GateInPlace returns line with each heavy simple command prefixed by
 // prefix(label, count of gated commands), so only those commands go through
-// loadslot and the rest of the line keeps running in the agent's own shell:
+// hostslot and the rest of the line keeps running in the agent's own shell:
 // a slot is not held
 // through a following `gh pr checks --watch`, and a `cd` carries over to the
 // agent's next command. Everything else in the line is left byte for byte;
 // the prefix goes right before the command's first word, after any
 // assignments (`CI=1 pnpm test`), which then reach the command through
-// loadslot's environment.
+// hostslot's environment.
 //
 // A `sh -c` / `bash -c` call whose script has heavy commands is prefixed as
 // a whole. It reports false, leaving the line alone, when nothing is heavy,
-// the line does not parse, sets LOADSLOT_DISABLE=1 or runs loadslot itself.
+// the line does not parse, sets HOSTSLOT_DISABLE=1 or runs hostslot itself.
 func GateInPlace(line, dir string, heavy *regexp.Regexp, prefix func(label string, count int) string) (string, []string, bool) {
 	if heavy == nil {
 		heavy = DefaultHeavy
 	}
-	if strings.Contains(line, "LOADSLOT_DISABLE=1") {
+	if disabledIn(line) {
 		return "", nil, false
 	}
 	var scripts packageScripts
@@ -51,7 +51,7 @@ func GateInPlace(line, dir string, heavy *regexp.Regexp, prefix func(label strin
 		for i, w := range call.Args {
 			words[i] = wordText(w)
 		}
-		if words[0] == "loadslot" {
+		if isSelf(words[0]) {
 			ours = true
 			return false
 		}

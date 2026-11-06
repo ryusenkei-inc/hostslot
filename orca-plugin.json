@@ -2,10 +2,10 @@
   "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
   "execution": "trusted-worker",
-  "id": "loadslot",
-  "name": "loadslot",
-  "version": "0.7.0",
-  "description": "Machine capacity for parallel agents: how many heavy commands run and wait, and how much memory is free, from loadslot.",
+  "id": "hostslot",
+  "name": "Hostslot",
+  "version": "0.8.0",
+  "description": "Machine capacity for parallel agents from Hostslot: what runs and waits, why, how much memory is free, and what a guard stopped.",
   "license": "MIT",
   "engines": {
     "orca": ">=1.4.248"
@@ -16,14 +16,14 @@
     "commands": [
       {
         "id": "details",
-        "title": "loadslot: Show details",
+        "title": "Hostslot: Show details",
         "action": "sidebar.right.toggle"
       }
     ],
     "panels": [
       {
         "id": "details",
-        "title": "loadslot",
+        "title": "Hostslot",
         "icon": "gauge",
         "entry": "apps/orca-plugin/src/panel.tsx",
         "ui": "components"
@@ -32,9 +32,9 @@
     "statusBarItems": [
       {
         "id": "capacity",
-        "text": "loadslot",
+        "text": "Hostslot",
         "icon": "gauge",
-        "tooltip": "loadslot: starting",
+        "tooltip": "Hostslot: starting",
         "command": "details"
       }
     ]

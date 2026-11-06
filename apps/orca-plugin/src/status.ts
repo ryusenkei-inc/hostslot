@@ -1,8 +1,8 @@
-// What the status bar item and the status command show, from `loadslot
+// What the status bar item and the status command show, from `hostslot
 // status --json`. Pure functions, so they are tested without Orca.
 import { origin } from './origin.ts';
 
-/** One job in `loadslot status --json`. */
+/** One job in `hostslot status --json`. */
 export type Job = {
   id?: number;
   command: string;
@@ -14,15 +14,15 @@ export type Job = {
   reported?: boolean;
   queued: string;
   started?: string;
-  /** Median duration of its recent runs (loadslot 0.5+). */
+  /** Median duration of its recent runs (hostslot 0.5+). */
   expectedMs?: number;
-  /** Memory admission holds back for it while it runs (loadslot 0.5+). */
+  /** Memory admission holds back for it while it runs (hostslot 0.5+). */
   heldMB?: number;
-  /** Why it waits: slots, memory or queue (loadslot 0.5+). */
+  /** Why it waits: slots, memory or queue (hostslot 0.5+). */
   reason?: string;
 };
 
-/** A job that ended, from `status --json`'s `recent` (loadslot 0.5+). */
+/** A job that ended, from `status --json`'s `recent` (hostslot 0.5+). */
 export type Finished = {
   command: string;
   dir: string;
@@ -35,14 +35,14 @@ export type Finished = {
   ended: string;
 };
 
-/** The output of `loadslot status --json`. */
+/** The output of `hostslot status --json`. */
 export type Status = {
   mode: string;
   version?: string;
   memory: { totalMB: number; freeMB: number };
   cpus: number;
   snapshot: { slots: number; used: number; heldMB?: number; running: Job[]; waiting: Job[] };
-  /** How many more weight-1 jobs would start now; missing before loadslot 0.5. */
+  /** How many more weight-1 jobs would start now; missing before hostslot 0.5. */
   room?: number;
   reserveMB?: number;
   ceilingMB?: number;
@@ -50,7 +50,7 @@ export type Status = {
 };
 
 /**
- * A check of `loadslot doctor --json`, or one the plugin adds: the full line,
+ * A check of `hostslot doctor --json`, or one the plugin adds: the full line,
  * the command that fixes it, and a title and detail for the panel.
  */
 export type Problem = {
@@ -94,20 +94,20 @@ export function summarize(s: Status, problems: Problem[] = []): Item {
   const first = problems[0];
   const issue = first ? [`! ${first.title ?? first.text}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`] : [];
   return {
-    text: `loadslot ${parts.join(' · ')}`,
+    text: `Hostslot ${parts.join(' · ')}`,
     tone,
     icon: problems.length > 0 ? 'warning' : 'gauge',
     tooltip: clamp([...issue, ...summary, 'Click for details'].join('\n'), TOOLTIP_MAX),
   };
 }
 
-/** The item when the loadslot command cannot be run. */
+/** The item when the hostslot command cannot be run. */
 export function unavailable(reason: string): Item {
   return {
-    text: 'loadslot: not found',
+    text: 'Hostslot: not found',
     tone: 'warning',
     icon: 'warning',
-    tooltip: `${reason}\nInstall loadslot: https://github.com/ryusenkei-inc/loadslot#install`,
+    tooltip: `${reason}\nInstall Hostslot: https://github.com/ryusenkei-inc/hostslot#quick-start`,
   };
 }
 

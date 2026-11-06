@@ -1,10 +1,10 @@
 # Release on a `v*` tag (.github/workflows/release.yaml): binaries for Linux, macOS and Windows
-# The version comes from the tag through Go's VCS stamping (`loadslot version`), so no ldflags
+# The version comes from the tag through Go's VCS stamping (`hostslot version`), so no ldflags
 version: 2
-project_name: loadslot
+project_name: hostslot
 
 builds:
-  - main: ./cmd/loadslot
+  - main: ./cmd/hostslot
     env:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]

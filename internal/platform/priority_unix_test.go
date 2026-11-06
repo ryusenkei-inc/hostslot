@@ -13,7 +13,7 @@ import (
 func TestBackgroundJobsRunNiced(t *testing.T) {
 	p := testPlatform(t)
 	cmd := exec.Command(self(t))
-	cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=sleep")
+	cmd.Env = append(os.Environ(), "HOSTSLOT_TEST_HELPER=sleep")
 	proc, err := p.Tracker.Start(cmd, StartOptions{Background: true, Cleanup: true})
 	if err != nil {
 		t.Fatal(err)

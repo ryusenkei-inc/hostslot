@@ -99,7 +99,7 @@ it('sums up guard stops; each stopped job stays a row of Recent', () => {
       title: 'Machine nearly out of memory',
       summary: '3 jobs · shop ×2, blog',
       last: Date.parse('2026-11-06T10:01:00Z'),
-      explanation: 'loadslot stopped the largest job running in the background. Run it again when there is room.',
+      explanation: 'Hostslot stopped the largest job running in the background. Run it again when there is room.',
     },
     {
       key: 'ceiling',
@@ -122,7 +122,7 @@ it('groups jobs by repository', () => {
 
 it('lists setup problems briefly, and says when memory is nearly gone', () => {
   const problems = [
-    { level: 'warn' as const, text: 'daemon pid 1 v0.4.1 …: older than this loadslot', fix: 'setup' as const, title: 'An older daemon is running', detail: 'v0.4.1 (pid 1). The next heavy command replaces it.' },
+    { level: 'warn' as const, text: 'daemon pid 1 v0.4.1 …: older than this hostslot', fix: 'setup' as const, title: 'An older daemon is running', detail: 'v0.4.1 (pid 1). The next heavy command replaces it.' },
     { level: 'error' as const, text: 'codex: cannot read hooks.json' },
   ];
   const v = view(status(), '', problems, 4, now);
@@ -136,9 +136,9 @@ it('lists setup problems briefly, and says when memory is nearly gone', () => {
   expect(low.machine?.memory.tone).toBe('danger');
 });
 
-it('explains a missing loadslot', () => {
+it('explains a missing hostslot', () => {
   const v = view(undefined, '');
-  expect(v).toMatchObject({ headline: "loadslot isn't installed", tone: 'warning' });
+  expect(v).toMatchObject({ headline: "Hostslot isn't installed", tone: 'warning' });
   expect(v.machine).toBeUndefined();
-  expect(v.setup.problems).toEqual([{ key: 'missing', tone: 'warning', title: 'loadslot not found', detail: 'Not on the PATH or in the usual places.' }]);
+  expect(v.setup.problems).toEqual([{ key: 'missing', tone: 'warning', title: 'Hostslot not found', detail: 'Not on the PATH or in the usual places.' }]);
 });

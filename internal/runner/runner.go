@@ -1,4 +1,4 @@
-// Package runner implements `loadslot run`: acquire a slot, run the command
+// Package runner implements `hostslot run`: acquire a slot, run the command
 // with its process tree tracked, release and record a learning sample.
 package runner
 
@@ -15,12 +15,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ryusenkei-inc/loadslot/internal/config"
-	"github.com/ryusenkei-inc/loadslot/internal/daemon"
-	"github.com/ryusenkei-inc/loadslot/internal/gate"
-	"github.com/ryusenkei-inc/loadslot/internal/jobkey"
-	"github.com/ryusenkei-inc/loadslot/internal/platform"
-	"github.com/ryusenkei-inc/loadslot/internal/store"
+	"github.com/ryusenkei-inc/hostslot/internal/config"
+	"github.com/ryusenkei-inc/hostslot/internal/daemon"
+	"github.com/ryusenkei-inc/hostslot/internal/gate"
+	"github.com/ryusenkei-inc/hostslot/internal/jobkey"
+	"github.com/ryusenkei-inc/hostslot/internal/platform"
+	"github.com/ryusenkei-inc/hostslot/internal/store"
 )
 
 // Options configure one run.
@@ -29,7 +29,7 @@ type Options struct {
 	// Label names the work for learning (default: the command line), so a
 	// wrapper such as `sh -c '<line>'` can learn as the heavy command inside.
 	Label string
-	// Source names who started the job (`--source`, or LOADSLOT_SOURCE).
+	// Source names who started the job (`--source`, or HOSTSLOT_SOURCE).
 	Source   string
 	Weight   int
 	Priority gate.Priority
@@ -37,12 +37,12 @@ type Options struct {
 	Stdin    io.Reader
 	Stdout   io.Writer
 	Stderr   io.Writer
-	// NoDaemon forces the lock fallback (LOADSLOT_NO_DAEMON=1).
+	// NoDaemon forces the lock fallback (HOSTSLOT_NO_DAEMON=1).
 	NoDaemon bool
-	// Disable runs the command without the gate (LOADSLOT_DISABLE=1).
+	// Disable runs the command without the gate (HOSTSLOT_DISABLE=1).
 	Disable bool
 	// Nested runs the command without the gate because an outer job already
-	// holds a slot (LOADSLOT_JOB is set). Waiting for a second slot could
+	// holds a slot (HOSTSLOT_JOB is set). Waiting for a second slot could
 	// deadlock when the outer job holds the last one.
 	Nested bool
 	// MaxWait gives up waiting for a slot after this long (0 = wait forever)
@@ -60,7 +60,7 @@ type Options struct {
 	MaxMemoryMB uint64
 }
 
-// Exit codes of loadslot itself.
+// Exit codes of hostslot itself.
 const (
 	// ExitBusy: no slot within MaxWait (EX_TEMPFAIL, retry later).
 	ExitBusy = 75
@@ -70,9 +70,9 @@ const (
 	ExitOverMemory = 77
 )
 
-// JobVar marks the environment of a gated command, so loadslot runs nested
+// JobVar marks the environment of a gated command, so hostslot runs nested
 // in it pass through.
-const JobVar = "LOADSLOT_JOB"
+const JobVar = "HOSTSLOT_JOB"
 
 // InnerParallelismVars are set to the job's worker share unless CI is set
 // or the variable is already set. pnpm 10 reads only the npm_config_ prefix
@@ -115,7 +115,7 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	}
 	l, err := acquire(p, cfg, req, deadline, o.NoDaemon, o.Stderr)
 	if errors.Is(err, daemon.ErrBusy) {
-		fmt.Fprintf(o.Stderr, "loadslot: no free slot within %s; the machine is busy (see `loadslot status`). Retry later, or allow a longer wait.\n", o.MaxWait)
+		fmt.Fprintf(o.Stderr, "hostslot: no free slot within %s; the machine is busy (see `hostslot status`). Retry later, or allow a longer wait.\n", o.MaxWait)
 		return ExitBusy, nil
 	}
 	if err != nil {
@@ -158,8 +158,8 @@ func withWorkers(env []string, workers int) []string {
 		has[strings.ToUpper(k)] = true
 	}
 	w := strconv.Itoa(workers)
-	if !has["LOADSLOT_WORKERS"] {
-		env = append(env, "LOADSLOT_WORKERS="+w)
+	if !has["HOSTSLOT_WORKERS"] {
+		env = append(env, "HOSTSLOT_WORKERS="+w)
 	}
 	if has["CI"] {
 		return env
@@ -237,7 +237,7 @@ func execute(p *platform.Platform, o Options, env []string, w watch) (result, er
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = o.Stdin, o.Stdout, o.Stderr
 
 	// The child shares the console or terminal, so it receives Ctrl+C
-	// itself. loadslot stays alive to release the slot; a second signal kills
+	// itself. hostslot stays alive to release the slot; a second signal kills
 	// the tree.
 	sigs := make(chan os.Signal, 2)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
@@ -247,7 +247,7 @@ func execute(p *platform.Platform, o Options, env []string, w watch) (result, er
 	if err != nil {
 		var notFound *exec.Error
 		if errors.As(err, &notFound) {
-			fmt.Fprintf(o.Stderr, "loadslot: %v\n", err)
+			fmt.Fprintf(o.Stderr, "hostslot: %v\n", err)
 			return result{code: 127}, nil
 		}
 		return result{code: 1}, err
@@ -313,13 +313,13 @@ loop:
 	res.peakMB = proc.PeakMB()
 	switch {
 	case res.machineOut:
-		fmt.Fprintln(o.Stderr, "loadslot: the machine was nearly out of memory and this was the largest job running in the background, so it was stopped; run it again when there is room")
+		fmt.Fprintln(o.Stderr, "hostslot: the machine was nearly out of memory and this was the largest job running in the background, so it was stopped; run it again when there is room")
 		res.code = ExitOverMemory
 	case res.overMemory:
-		fmt.Fprintf(o.Stderr, "loadslot: the command used %d MB, over its memory ceiling of %d MB, and was stopped (--max-memory or jobCeilingFraction in config.json to change)\n", overMB, w.ceilingMB)
+		fmt.Fprintf(o.Stderr, "hostslot: the command used %d MB, over its memory ceiling of %d MB, and was stopped (--max-memory or jobCeilingFraction in config.json to change)\n", overMB, w.ceilingMB)
 		res.code = ExitOverMemory
 	case res.timedOut:
-		fmt.Fprintf(o.Stderr, "loadslot: the command ran longer than %s and was stopped\n", o.Timeout)
+		fmt.Fprintf(o.Stderr, "hostslot: the command ran longer than %s and was stopped\n", o.Timeout)
 		res.code = ExitTimeout
 	default:
 		res.code = exitCode(cmd, werr)

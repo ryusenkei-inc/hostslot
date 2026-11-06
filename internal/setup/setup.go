@@ -1,4 +1,4 @@
-// Package setup registers loadslot's agent hooks in the agents' settings
+// Package setup registers hostslot's agent hooks in the agents' settings
 // files. It edits only its own entries and keeps everything else, including
 // the order of keys, so other tools' hooks (an IDE's, for example) survive.
 package setup
@@ -13,11 +13,11 @@ import (
 	"strings"
 )
 
-// Agent is a coding agent whose hooks loadslot registers. Claude Code's
+// Agent is a coding agent whose hooks hostslot registers. Claude Code's
 // settings file and Codex's hooks.json share the `hooks.PreToolUse` layout.
 type Agent string
 
-// The agents loadslot has hooks for.
+// The agents hostslot has hooks for.
 const (
 	Claude Agent = "claude"
 	Codex  Agent = "codex"
@@ -43,7 +43,7 @@ func SettingsPath(a Agent) (string, error) {
 
 func (a Agent) hookArgs() string { return " hook " + string(a) }
 
-// HookCommand is the hook command for the loadslot executable at exe. The
+// HookCommand is the hook command for the hostslot executable at exe. The
 // agents run it through a shell (cmd on Windows for Codex), so a path with
 // spaces is quoted.
 func HookCommand(exe string, a Agent) string {
@@ -62,9 +62,9 @@ const (
 	Unchanged Result = iota
 	// Added: the hook was registered.
 	Added
-	// Updated: an existing loadslot hook now points at a different command.
+	// Updated: an existing hostslot hook now points at a different command.
 	Updated
-	// Removed: loadslot hooks were removed.
+	// Removed: hostslot hooks were removed.
 	Removed
 )
 
@@ -73,7 +73,7 @@ func (r Result) String() string {
 }
 
 // Register adds command as the agent's PreToolUse hook for Bash in the file
-// at path, or removes loadslot's hooks for the agent when remove is set. The
+// at path, or removes hostslot's hooks for the agent when remove is set. The
 // entry is appended after existing PreToolUse groups, which also keeps the
 // position-based keys Codex trusts other tools' hooks by. With dryRun,
 // nothing is written. A missing file is created.
@@ -116,7 +116,7 @@ func edit(data []byte, a Agent, command string, remove bool) ([]byte, Result, er
 	var kept []json.RawMessage
 	found := false
 	for _, g := range groups {
-		current, ours := loadslotCommand(g, a)
+		current, ours := hostslotCommand(g, a)
 		switch {
 		case !ours:
 			kept = append(kept, g)
@@ -182,9 +182,9 @@ func hookGroup(command string) json.RawMessage {
 	return raw
 }
 
-// loadslotCommand returns the command of a group that runs `loadslot hook
+// hostslotCommand returns the command of a group that runs `hostslot hook
 // <agent>`, whatever path the executable has.
-func loadslotCommand(group json.RawMessage, a Agent) (string, bool) {
+func hostslotCommand(group json.RawMessage, a Agent) (string, bool) {
 	var g struct {
 		Hooks []struct {
 			Command string `json:"command"`
@@ -229,10 +229,10 @@ func writeAtomic(path string, data []byte) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-// isOurExe reports whether a hook's executable is loadslot, or jobgate, its
-// former name, so setup updates an old entry in place instead of adding a
-// second hook.
+// isOurExe reports whether a hook's executable is hostslot, or one of its
+// former names (loadslot, jobgate), so setup updates an old entry in place
+// instead of adding a second hook.
 func isOurExe(exe string) bool {
 	base := strings.ToLower(filepath.Base(filepath.FromSlash(exe)))
-	return strings.Contains(base, "loadslot") || strings.Contains(base, "jobgate")
+	return strings.Contains(base, "hostslot") || strings.Contains(base, "loadslot") || strings.Contains(base, "jobgate")
 }

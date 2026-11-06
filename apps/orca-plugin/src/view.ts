@@ -1,4 +1,4 @@
-// What the details panel shows, built by the worker from `loadslot status
+// What the details panel shows, built by the worker from `hostslot status
 // --json` and posted to the panel. Pure, so it is tested without Orca.
 //
 // The panel answers, in this order: is the machine OK; what runs and when it
@@ -80,14 +80,14 @@ export type ActionResult = {
   text?: string;
 };
 
-/** Whether loadslot is installed and wired up. */
+/** Whether hostslot is installed and wired up. */
 export type Setup = {
   problems: SetupProblem[];
   action?: SetupAction;
   /** What the worker is doing now. */
   progress?: string;
   result?: ActionResult;
-  /** About this machine and loadslot, when there are no problems. */
+  /** About this machine and hostslot, when there are no problems. */
   facts: { label: string; value: string }[];
   /** How many checks ran (0 before the first `doctor`). */
   checks: number;
@@ -97,7 +97,7 @@ export type Setup = {
 export type View = {
   headline: string;
   tone: Tone;
-  /** Missing while loadslot can't be read. */
+  /** Missing while hostslot can't be read. */
   machine?: {
     memory: { usedPct: number; label: string; note?: string; tone: Tone };
     slots: { usedPct: number; label: string };
@@ -123,11 +123,11 @@ const outcomes: Record<string, [label: string, tone: Tone, detail: string]> = {
   'gave up': ['gave up', 'neutral', 'Left the queue before it started'],
 };
 
-/** The view of a status and the setup's problems, or of why loadslot could not be read. */
+/** The view of a status and the setup's problems, or of why hostslot could not be read. */
 export function view(s: Status | undefined, reason = '', problems: Problem[] = [], checks = 0, now = Date.now()): View {
   if (!s) {
     return {
-      headline: "loadslot isn't installed",
+      headline: "Hostslot isn't installed",
       tone: 'warning',
       running: [],
       waiting: [],
@@ -135,7 +135,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
       recent: [],
       byRepo: [],
       setup: {
-        problems: [{ key: 'missing', tone: 'warning', title: 'loadslot not found', detail: reason || 'Not on the PATH or in the usual places.' }],
+        problems: [{ key: 'missing', tone: 'warning', title: 'Hostslot not found', detail: reason || 'Not on the PATH or in the usual places.' }],
         facts: [],
         checks,
       },
@@ -229,7 +229,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
     setup: {
       problems: setupProblems,
       facts: [
-        { label: 'loadslot', value: `${s.version ?? 'unknown version'}${s.mode === 'daemon' ? '' : ` (${s.mode})`}` },
+        { label: 'Hostslot', value: `${s.version ?? 'unknown version'}${s.mode === 'daemon' ? '' : ` (${s.mode})`}` },
         { label: 'CPUs', value: String(s.cpus) },
         ...(s.ceilingMB ? [{ label: 'Memory ceiling per job', value: size(s.ceilingMB) }] : []),
       ],
@@ -238,7 +238,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
   };
 }
 
-// An older loadslot's doctor checks have only their full line.
+// An older hostslot's doctor checks have only their full line.
 function brief(p: Problem, i: number): SetupProblem {
   const tone = p.level === 'error' ? 'danger' : 'warning';
   if (!p.title) return { key: `${i}`, tone, title: p.text };
@@ -249,7 +249,7 @@ const guards: { outcome: string; title: string; explanation: (s: Status) => stri
   {
     outcome: 'machine',
     title: 'Machine nearly out of memory',
-    explanation: () => 'loadslot stopped the largest job running in the background. Run it again when there is room.',
+    explanation: () => 'Hostslot stopped the largest job running in the background. Run it again when there is room.',
   },
   {
     outcome: 'ceiling',

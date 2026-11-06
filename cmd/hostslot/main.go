@@ -1,4 +1,4 @@
-// Command loadslot is a machine-wide gate for heavy local jobs.
+// Command hostslot is a machine-wide gate for heavy local jobs.
 package main
 
 import (
@@ -18,37 +18,37 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/ryusenkei-inc/loadslot/internal/config"
-	"github.com/ryusenkei-inc/loadslot/internal/daemon"
-	"github.com/ryusenkei-inc/loadslot/internal/gate"
-	"github.com/ryusenkei-inc/loadslot/internal/hook"
-	"github.com/ryusenkei-inc/loadslot/internal/platform"
-	"github.com/ryusenkei-inc/loadslot/internal/runner"
-	"github.com/ryusenkei-inc/loadslot/internal/setup"
-	"github.com/ryusenkei-inc/loadslot/internal/store"
+	"github.com/ryusenkei-inc/hostslot/internal/config"
+	"github.com/ryusenkei-inc/hostslot/internal/daemon"
+	"github.com/ryusenkei-inc/hostslot/internal/gate"
+	"github.com/ryusenkei-inc/hostslot/internal/hook"
+	"github.com/ryusenkei-inc/hostslot/internal/platform"
+	"github.com/ryusenkei-inc/hostslot/internal/runner"
+	"github.com/ryusenkei-inc/hostslot/internal/setup"
+	"github.com/ryusenkei-inc/hostslot/internal/store"
 )
 
-const usage = `loadslot: a machine-wide gate for heavy local jobs
+const usage = `hostslot: a machine-wide gate for heavy local jobs
 
 Usage:
-  loadslot run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
+  hostslot run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
               [--max-wait DURATION] [--timeout DURATION] [--max-memory MB] [--keep-children]
               -- <command> [args...]
-  loadslot status [--json]
-  loadslot daemon
-  loadslot hook claude|codex [--weight N] [--match REGEX]
-  loadslot setup [claude|codex] [--remove] [--dry-run] [--settings PATH]
-  loadslot doctor
-  loadslot version
+  hostslot status [--json]
+  hostslot daemon
+  hostslot hook claude|codex [--weight N] [--match REGEX]
+  hostslot setup [claude|codex] [--remove] [--dry-run] [--settings PATH]
+  hostslot doctor
+  hostslot version
 
 Environment:
-  LOADSLOT_SLOTS       override the computed number of slots
-  LOADSLOT_COST_MB     assumed peak memory of a weight-1 job without samples
-  LOADSLOT_RESERVE_MB  memory kept free for everything else
-  LOADSLOT_PRIORITY    default priority (interactive or background)
-  LOADSLOT_DISABLE=1   run commands directly without the gate
-  LOADSLOT_NO_DAEMON=1 use the machine-wide lock fallback instead of the daemon
-  LOADSLOT_HOME        data directory (also isolates the daemon)
+  HOSTSLOT_SLOTS       override the computed number of slots
+  HOSTSLOT_COST_MB     assumed peak memory of a weight-1 job without samples
+  HOSTSLOT_RESERVE_MB  memory kept free for everything else
+  HOSTSLOT_PRIORITY    default priority (interactive or background)
+  HOSTSLOT_DISABLE=1   run commands directly without the gate
+  HOSTSLOT_NO_DAEMON=1 use the machine-wide lock fallback instead of the daemon
+  HOSTSLOT_HOME        data directory (also isolates the daemon)
 `
 
 func main() {
@@ -80,15 +80,21 @@ func run(args []string) int {
 		fmt.Print(usage)
 		return 0
 	}
-	fmt.Fprintf(os.Stderr, "loadslot: unknown command %q\n\n%s", args[0], usage)
+	fmt.Fprintf(os.Stderr, "hostslot: unknown command %q\n\n%s", args[0], usage)
 	return 2
 }
 
 func version() string {
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
-		return "loadslot " + info.Main.Version
+		return "hostslot " + info.Main.Version
 	}
-	return "loadslot (devel)"
+	return "hostslot (devel)"
+}
+
+// disabled reports whether the gate is turned off, also under the former
+// name, which agents' command lines and shell profiles may still set.
+func disabled() bool {
+	return os.Getenv("HOSTSLOT_DISABLE") == "1" || os.Getenv("LOADSLOT_DISABLE") == "1"
 }
 
 func nativePlatform() (*platform.Platform, error) {
@@ -100,7 +106,7 @@ func nativePlatform() (*platform.Platform, error) {
 }
 
 func fail(err error) int {
-	fmt.Fprintf(os.Stderr, "loadslot: %v\n", err)
+	fmt.Fprintf(os.Stderr, "hostslot: %v\n", err)
 	return 2
 }
 
@@ -109,7 +115,7 @@ func cmdRun(args []string) int {
 	weight := fs.Int("weight", 1, "relative cost of the job in slots; a hint until samples exist")
 	prio := fs.String("priority", "", "interactive or background (default: interactive when stdin is a terminal)")
 	label := fs.String("as", "", "name the work for learning (default: the command line)")
-	source := fs.String("source", os.Getenv("LOADSLOT_SOURCE"), "who starts the job, shown in status (default: $LOADSLOT_SOURCE)")
+	source := fs.String("source", os.Getenv("HOSTSLOT_SOURCE"), "who starts the job, shown in status (default: $HOSTSLOT_SOURCE)")
 	maxWait := fs.Duration("max-wait", 0, "give up waiting for a slot after this long and exit 75 (0 = wait forever)")
 	timeout := fs.Duration("timeout", 0, "stop the command after it has run this long and exit 124 (0 = none)")
 	keepChildren := fs.Bool("keep-children", false, "leave processes the command started running after it exits")
@@ -119,7 +125,7 @@ func cmdRun(args []string) int {
 	}
 	cmd := fs.Args()
 	if len(cmd) == 0 {
-		fmt.Fprintln(os.Stderr, "loadslot run: missing command (loadslot run -- <command> [args...])")
+		fmt.Fprintln(os.Stderr, "hostslot run: missing command (hostslot run -- <command> [args...])")
 		return 2
 	}
 	priority, err := resolvePriority(*prio)
@@ -148,10 +154,10 @@ func cmdRun(args []string) int {
 		Stdin:        os.Stdin,
 		Stdout:       os.Stdout,
 		Stderr:       os.Stderr,
-		NoDaemon:     os.Getenv("LOADSLOT_NO_DAEMON") == "1",
-		Disable:      os.Getenv("LOADSLOT_DISABLE") == "1",
-		// JOBGATE_JOB: an outer job of jobgate, the former name, during an upgrade
-		Nested: os.Getenv(runner.JobVar) != "" || os.Getenv("JOBGATE_JOB") != "",
+		NoDaemon:     os.Getenv("HOSTSLOT_NO_DAEMON") == "1",
+		Disable:      disabled(),
+		// An outer job of a former name (loadslot, jobgate) during an upgrade
+		Nested: os.Getenv(runner.JobVar) != "" || os.Getenv("LOADSLOT_JOB") != "" || os.Getenv("JOBGATE_JOB") != "",
 	})
 	if err != nil {
 		return fail(err)
@@ -162,7 +168,7 @@ func cmdRun(args []string) int {
 func resolvePriority(flagValue string) (gate.Priority, error) {
 	v := flagValue
 	if v == "" {
-		v = os.Getenv("LOADSLOT_PRIORITY")
+		v = os.Getenv("HOSTSLOT_PRIORITY")
 	}
 	if v == "" {
 		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
@@ -182,7 +188,7 @@ func resolvePriority(flagValue string) (gate.Priority, error) {
 // it.
 func cmdHook(args []string) int {
 	if len(args) == 0 || (args[0] != "claude" && args[0] != "codex") {
-		fmt.Fprintln(os.Stderr, "loadslot hook: missing agent (loadslot hook claude|codex)")
+		fmt.Fprintln(os.Stderr, "hostslot hook: missing agent (hostslot hook claude|codex)")
 		return 1
 	}
 	agent := args[0]
@@ -192,7 +198,7 @@ func cmdHook(args []string) int {
 	if err := fs.Parse(args[1:]); err != nil {
 		return 1
 	}
-	if os.Getenv("LOADSLOT_DISABLE") == "1" {
+	if disabled() {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return 0
 	}
@@ -200,7 +206,7 @@ func cmdHook(args []string) int {
 	if *match != "" {
 		re, err := regexp.Compile(*match)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "loadslot hook: --match: %v\n", err)
+			fmt.Fprintf(os.Stderr, "hostslot hook: --match: %v\n", err)
 			return 1
 		}
 		heavy = re
@@ -213,7 +219,7 @@ func cmdHook(args []string) int {
 		err = hook.Codex(os.Stdin, os.Stdout, o)
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "loadslot hook: %v\n", err)
+		fmt.Fprintf(os.Stderr, "hostslot hook: %v\n", err)
 		return 1
 	}
 	return 0
@@ -226,14 +232,14 @@ func cmdSetup(args []string) int {
 	named := len(args) > 0 && !strings.HasPrefix(args[0], "-")
 	if named {
 		if !slices.Contains(setup.Agents, setup.Agent(args[0])) {
-			fmt.Fprintf(os.Stderr, "loadslot setup: unknown agent %q (claude, codex)\n", args[0])
+			fmt.Fprintf(os.Stderr, "hostslot setup: unknown agent %q (claude, codex)\n", args[0])
 			return 2
 		}
 		agents = []setup.Agent{setup.Agent(args[0])}
 		args = args[1:]
 	}
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
-	remove := fs.Bool("remove", false, "remove loadslot's hooks instead of adding them")
+	remove := fs.Bool("remove", false, "remove hostslot's hooks instead of adding them")
 	dryRun := fs.Bool("dry-run", false, "report what would change without writing")
 	path := fs.String("settings", "", "hooks file (only with an agent; default: the agent's user-level file)")
 	asJSON := fs.Bool("json", false, "print what changed as JSON (for integrations such as the Orca plugin)")
@@ -241,7 +247,7 @@ func cmdSetup(args []string) int {
 		return 2
 	}
 	if *path != "" && !named {
-		fmt.Fprintln(os.Stderr, "loadslot setup: --settings needs an agent (loadslot setup claude --settings PATH)")
+		fmt.Fprintln(os.Stderr, "hostslot setup: --settings needs an agent (hostslot setup claude --settings PATH)")
 		return 2
 	}
 	exe, err := setupExe(*remove)
@@ -273,7 +279,7 @@ func cmdSetup(args []string) int {
 			setup.Unchanged: "already up to date",
 			setup.Added:     "added the PreToolUse hook `" + command + "`",
 			setup.Updated:   "updated the PreToolUse hook to `" + command + "`",
-			setup.Removed:   "removed loadslot's PreToolUse hook",
+			setup.Removed:   "removed hostslot's PreToolUse hook",
 		}[res]
 		if *dryRun && res != setup.Unchanged {
 			verb = "would have " + verb
@@ -285,14 +291,14 @@ func cmdSetup(args []string) int {
 		report.Agents = append(report.Agents, agentResult{Agent: string(a), File: file, Result: res.String()})
 	}
 	if len(report.Agents) == 0 {
-		say("No supported agent found (Claude Code, Codex). Install one, or name it: loadslot setup claude")
+		say("No supported agent found (Claude Code, Codex). Install one, or name it: hostslot setup claude")
 	}
 	// Setup follows an install or upgrade, so an older daemon is retired now
 	// rather than at the next run (its running jobs still finish).
 	if !*remove && !*dryRun {
 		if p, err := nativePlatform(); err == nil && daemon.RetireOlder(p, daemon.Version()) {
 			report.Retired = true
-			say("Retired the older daemon; the next loadslot run starts this version's")
+			say("Retired the older daemon; the next hostslot run starts this version's")
 		}
 	}
 	if *asJSON {
@@ -303,7 +309,7 @@ func cmdSetup(args []string) int {
 	return 0
 }
 
-// setupReport is `loadslot setup --json`.
+// setupReport is `hostslot setup --json`.
 type setupReport struct {
 	Agents  []agentResult `json:"agents"`
 	Retired bool          `json:"retired"`
@@ -317,7 +323,7 @@ type agentResult struct {
 	Result string `json:"result"`
 }
 
-// setupExe is the loadslot path to write into hook settings: a stable path
+// setupExe is the hostslot path to write into hook settings: a stable path
 // on the PATH when there is one for this binary (see setup.StableExe).
 func setupExe(remove bool) (string, error) {
 	exe, err := os.Executable()
@@ -330,7 +336,7 @@ func setupExe(remove bool) (string, error) {
 	// A `go run` binary is deleted when it exits, which would leave a hook
 	// that fails on every Bash call.
 	if !remove && strings.Contains(filepath.ToSlash(exe), "/go-build") {
-		return "", errors.New("run setup from an installed loadslot, not `go run`")
+		return "", errors.New("run setup from an installed hostslot, not `go run`")
 	}
 	return setup.StableExe(exe), nil
 }
@@ -356,7 +362,7 @@ func cmdDaemon(args []string) int {
 	}
 	err = daemon.Run(p, srv)
 	if errors.Is(err, daemon.ErrRunning) {
-		fmt.Fprintln(os.Stderr, "loadslot: daemon already running")
+		fmt.Fprintln(os.Stderr, "hostslot: daemon already running")
 		return 0
 	}
 	if err != nil {
@@ -487,13 +493,13 @@ func truncate(s string, n int) string {
 	return strings.TrimSpace(s[:n-3]) + "..."
 }
 
-// hookExe is the loadslot the hook's rewritten commands run: this binary, so
+// hookExe is the hostslot the hook's rewritten commands run: this binary, so
 // they need no PATH lookup, unless it is a `go run` build that is about to
 // be deleted.
 func hookExe() string {
 	exe, err := os.Executable()
 	if err != nil || strings.Contains(filepath.ToSlash(exe), "/go-build") {
-		return "loadslot"
+		return "hostslot"
 	}
 	return exe
 }
