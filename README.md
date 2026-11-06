@@ -41,7 +41,7 @@ To upgrade, replace the binary. On Windows a running daemon keeps `jobgate.exe` 
 ## Usage
 
 ```sh
-jobgate run [--weight N] [--priority interactive|background] [--as LABEL]
+jobgate run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
             [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
 jobgate status [--json]
 jobgate daemon [--idle 10m]
@@ -56,8 +56,9 @@ jobgate version
 - `--as` names the work for learning instead of the command line, e.g. `jobgate run --as "pnpm test" -- sh -c 'pnpm test 2>&1 | tail'`.
 - `--max-wait 5m` gives up waiting for a slot after 5 minutes (exit `75`, retry later). The command never runs without a slot.
 - `--timeout 2m` stops the command's process tree after it has run for 2 minutes (exit `124`). A stopped run is not learned.
+- `--source claude` names who started the job (default: `$JOBGATE_SOURCE`), shown in `status`. The job also records `ORCA_PANE_KEY`, `ORCA_TAB_ID` and `ORCA_WORKTREE_ID` when set, so `status --json` tells which Orca pane a job belongs to.
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
-- `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory) and waiting jobs. Without a daemon, it shows how many slot locks are held.
+- `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
 - `hook claude` is a Claude Code hook, and `setup claude` registers it (see [Claude Code](#claude-code)).
 
@@ -72,12 +73,12 @@ cpus:    8
 tracker: job object (peak committed memory)
 
 running (1)
-  ID  WEIGHT  EST MB  NOW MB  SAMPLES  PRIORITY     AGE  COMMAND  DIR
-  4   1       2048    6       0        interactive  2s   sleep 7  C:\src\app
+  ID  WEIGHT  EST MB  NOW MB  SAMPLES  PRIORITY     SOURCE  AGE  COMMAND  DIR
+  4   1       2048    6       0        interactive  -       2s   sleep 7  C:\src\app
 
 waiting (1)
-  ID  WEIGHT  EST MB  NOW MB  SAMPLES  PRIORITY    AGE  COMMAND  DIR
-  5   1       2048    -       0        background  1s   sleep 1  C:\src\app
+  ID  WEIGHT  EST MB  NOW MB  SAMPLES  PRIORITY    SOURCE  AGE  COMMAND  DIR
+  5   1       2048    -       0        background  claude  1s   sleep 1  C:\src\app
 ```
 
 ## Integration
@@ -108,7 +109,7 @@ jobgate setup claude --remove   # remove it
 ```
 
 - The line is parsed as Bash. It is heavy when any of its commands, including those in `$(...)`, subshells and `sh -c` / `bash -c` scripts, is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. Text in quotes, heredocs and comments never counts. `--match <regex>` replaces this list. A line that doesn't parse is left alone.
-- The whole line becomes `jobgate run --weight 1 --priority background --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
+- The whole line becomes `jobgate run --weight 1 --priority background --source claude --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
 - Light commands (`git`, `pnpm install`, formatters, prose linters) are left alone, so they never wait. `git push` is left alone too: gate the `pre-push` hook instead (see below).
 - On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `JOBGATE_DISABLE=1` in its environment or in the command line, it does nothing.
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it.
@@ -161,6 +162,7 @@ Optional `config.json` in the data directory. The daemon rereads it every second
 | `JOBGATE_PRIORITY` | Default priority: `interactive` or `background` |
 | `JOBGATE_DISABLE=1` | Run commands directly, without the gate |
 | `JOBGATE_NO_DAEMON=1` | Skip the daemon and use the lock fallback |
+| `JOBGATE_SOURCE` | Default `--source` of `jobgate run` |
 | `JOBGATE_HOME` | Data directory. It also isolates the daemon, so separate homes don't share slots |
 
 Environment variables take precedence over `config.json`. The daemon reads them when it starts, so set them where the daemon is started, or use `config.json`.

@@ -93,7 +93,7 @@ func TestClaudeRewritesHeavyBash(t *testing.T) {
 		t.Fatalf("%v: %s", err, out.String())
 	}
 	got := res.HookSpecificOutput
-	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "jobgate run --weight 2 --priority background --as 'pnpm test' --max-wait 1m0s --timeout 9m0s -- sh -c 'pnpm test'" {
+	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "jobgate run --weight 2 --priority background --source claude --as 'pnpm test' --max-wait 1m0s --timeout 9m0s -- sh -c 'pnpm test'" {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 	if got.UpdatedInput["timeout"] != float64(600000) {
@@ -124,7 +124,7 @@ func TestWrapQuotesForSh(t *testing.T) {
 	}
 	line := `printf '%s\n' "it's" $HOME`
 	wrapped := Wrap(line, "x", 1, Budget{})
-	inner := strings.TrimPrefix(wrapped, "jobgate run --weight 1 --priority background --as 'x' -- sh -c ")
+	inner := strings.TrimPrefix(wrapped, "jobgate run --weight 1 --priority background --source claude --as 'x' -- sh -c ")
 	// The quoted argument must reach sh as the original line.
 	out, err := exec.Command("sh", "-c", "printf '%s' "+inner).Output()
 	if err != nil {

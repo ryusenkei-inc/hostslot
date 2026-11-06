@@ -28,7 +28,9 @@ type Options struct {
 	Args []string
 	// Label names the work for learning (default: the command line), so a
 	// wrapper such as `sh -c '<line>'` can learn as the heavy command inside.
-	Label    string
+	Label string
+	// Source names who started the job (`--source`, or JOBGATE_SOURCE).
+	Source   string
 	Weight   int
 	Priority gate.Priority
 	Dir      string
@@ -96,6 +98,8 @@ func Run(p *platform.Platform, o Options) (int, error) {
 		Weight:   max(o.Weight, 1),
 		Priority: o.Priority,
 		PID:      os.Getpid(),
+		Source:   o.Source,
+		Context:  jobContext(os.Getenv),
 	}
 	var deadline time.Time
 	if o.MaxWait > 0 {
@@ -121,6 +125,23 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	}
 	l.release(sample)
 	return code, err
+}
+
+// ContextVars are the environment variables recorded with a job, so an
+// integration can tell where it came from (Orca sets these in its terminals).
+var ContextVars = []string{"ORCA_PANE_KEY", "ORCA_TAB_ID", "ORCA_WORKTREE_ID"}
+
+func jobContext(getenv func(string) string) map[string]string {
+	var ctx map[string]string
+	for _, k := range ContextVars {
+		if v := getenv(k); v != "" {
+			if ctx == nil {
+				ctx = map[string]string{}
+			}
+			ctx[k] = v
+		}
+	}
+	return ctx
 }
 
 // withWorkers returns env with the inner parallelism variables added.

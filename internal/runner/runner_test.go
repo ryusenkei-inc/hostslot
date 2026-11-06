@@ -236,3 +236,14 @@ func TestWithWorkers(t *testing.T) {
 		t.Fatalf("CI handling: %v", ci)
 	}
 }
+
+func TestJobContext(t *testing.T) {
+	env := map[string]string{"ORCA_PANE_KEY": "pane-1", "ORCA_WORKTREE_ID": "wt", "HOME": "/h"}
+	ctx := jobContext(func(k string) string { return env[k] })
+	if len(ctx) != 2 || ctx["ORCA_PANE_KEY"] != "pane-1" || ctx["ORCA_WORKTREE_ID"] != "wt" {
+		t.Fatalf("got %v", ctx)
+	}
+	if ctx := jobContext(func(string) string { return "" }); ctx != nil {
+		t.Fatalf("empty environment gave %v", ctx)
+	}
+}
