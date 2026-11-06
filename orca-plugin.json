@@ -4,7 +4,7 @@
   "execution": "trusted-worker",
   "id": "hostslot",
   "name": "Hostslot",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Machine capacity for parallel agents from Hostslot: what runs and waits, why, how much memory is free, and what a guard stopped.",
   "license": "MIT",
   "engines": {
