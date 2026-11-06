@@ -4,8 +4,9 @@ jobgate（重いジョブの実行をマシン全体で調整する Go の CLI�
 
 ## このリポの規約
 
-- 公開の OSS: 社内の事情・個人名・秘密値を書かない
-- 英語: README・issue・PR の本文・コードのコメント（共通の規約の「日本語」より優先）
+- 公開の OSS（MIT）: 社内の事情・個人名・秘密値を書かない
+- 英語: README・issue・PR のタイトルと本文・コミットメッセージ・コードのコメント（共通の規約の「日本語」より優先）
+  - prose-lint の `commit/subject-ja`: `prose-lint.json` で無効化
 - 本体: Go のモジュール。Node.js は開発の道具だけ（prose-lint・共通の規約・`scripts/`）
 - テスト: Go の `testing`、対象と同じディレクトリに `*_test.go`（共通規約の Vitest の代わり）
 - OS ごとの実装: `internal/platform` のビルドタグのファイルだけ。`internal/gate` は OS に依存しない

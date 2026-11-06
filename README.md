@@ -210,3 +210,7 @@ pnpm repo:settings             # apply GitHub repository settings (squash merge 
 ```
 
 CI (`.github/workflows/ci.yaml`) runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles for all three, and checks prose, the PR title and secrets.
+
+## License
+
+[MIT](LICENSE)
