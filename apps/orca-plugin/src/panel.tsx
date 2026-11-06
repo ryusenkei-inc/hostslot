@@ -122,7 +122,7 @@ function DevServers({ v }: { v: View }) {
       ) : (
         <List label="Dev servers">
           {running.map((p) => (
-            <ListItem key={p.key} title={p.name} description={p.where}>
+            <ListItem key={p.key} title={p.name} description={p.where === p.name ? undefined : p.where}>
               <Row gap="sm" wrap>
                 <Link href={p.url}>{p.url}</Link>
                 {p.note ? (
@@ -137,7 +137,7 @@ function DevServers({ v }: { v: View }) {
       )}
       {idle.length > 0 ? (
         <Collapsible title="Assigned ports" description={`${idle.length} not running`}>
-          <KeyValue label="Assigned ports" items={idle.map((p) => ({ label: `${p.name} · ${p.where}`, value: p.url.replace('http://localhost:', '') }))} />
+          <KeyValue label="Assigned ports" items={idle.map((p) => ({ label: p.where === p.name ? p.name : `${p.name} · ${p.where}`, value: p.url.replace('http://localhost:', '') }))} />
         </Collapsible>
       ) : null}
     </Stack>

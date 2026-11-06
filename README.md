@@ -126,7 +126,7 @@ hostslot serve -- pnpm dev          # hostslot: shop on http://localhost:21643 (
 hostslot serve -- vite --port {port}
 hostslot serve --fixed 3000 -- pnpm dev   # a port that can't move (an OAuth callback): one worktree at a time
 hostslot port web                   # just print the port
-hostslot port --list                # every assigned port, with its worktree
+hostslot port --list                # every assigned port: worktree, running, where it listens
 ```
 
 | | |
@@ -134,7 +134,7 @@ hostslot port --list                # every assigned port, with its worktree
 | **Service** | The package's name without its scope (`@acme/shop` → `shop`), else its directory; `--name` to choose |
 | **Port** | The tool's default (Vite 5173, Next.js 3000) for the first service that asks while nothing listens on it, and it stays with it. Others get a free port from 20000-29999, starting where the key (repository + worktree + service) points |
 | **Handed over** | `PORT`, `PORT_<NAME>` and `HOSTSLOT_PORT`; `{port}` in the command; for Vite, `--port N --strictPort` appended, also over a port written in the script |
-| **Checked** | When nothing listens on the port after 30 s, it says the app likely ignores `PORT` and how to fix it |
+| **Checked** | It watches which ports the server's processes listen on. When it listens elsewhere (an app that ignores `PORT`), it says where and how to fix it; `hostslot doctor` points out scripts with a port written in (`next dev -p 3000`) |
 | **Freed** | When the worktree is removed |
 | **Slots** | None: a dev server runs for hours and doesn't wait for capacity |
 
@@ -159,10 +159,10 @@ Each finished job adds a sample to `samples.json` in the data directory. Nothing
 This repository is also an Orca plugin (`orca-plugin.json` at the root, code in `apps/orca-plugin`).
 
 - **Status bar:** `Hostslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
-- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; jobs a guard stopped; recent outcomes; jobs by repository; setup problems with one button to fix them
+- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; dev servers with their URLs, and a warning when one listens elsewhere; jobs a guard stopped; recent outcomes; jobs by repository; setup problems with one button to fix them
 - **Install from the panel:** when Hostslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in Hostslot's data directory and runs `hostslot setup`. Nothing is downloaded or written before a press
 - It reads `hostslot status --json` every 5 seconds and only shows; scheduling comes from the agents' hooks
-- Development: `orca plugin dev load .`, then `orca plugin logs local.hostslot`
+- Development: `orca plugin dev load .`, then `orca plugin logs local.hostslot`. For screenshots, a status in `panel-fixture.json` in the data directory replaces the live one while the file exists
 
 ### Claude Code
 
@@ -230,9 +230,9 @@ Where Hostslot is installed but not wanted (CI), set `HOSTSLOT_DISABLE=1`.
 | `hostslot run [flags] -- <command>` | Wait for admission, then run the command with stdin, stdout and stderr passed through; prints a status line to stderr every 5 s while waiting |
 | `hostslot status [--json]` | Slots, memory, room for more, running, waiting and recent jobs. `--json` adds held memory, wait reasons and typical durations |
 | `hostslot setup [claude\|codex] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds, and retire an older daemon |
-| `hostslot doctor [--json]` | Check the binary, the `PATH`, the daemon and the hooks, with how to fix each problem; exits 1 on warnings |
+| `hostslot doctor [--json]` | Check the binary, the `PATH`, the daemon, the hooks and hard-coded ports in this package, with how to fix each problem; exits 1 on warnings |
 | `hostslot port [--default PORT] [--json] <name>` | Print the port of a dev server of this worktree, assigning one on first use |
-| `hostslot port --list [--json]` | Every assigned port, with its service and worktree |
+| `hostslot port --list [--json]` | Every assigned port, with its service, worktree, whether it runs and where it listens |
 | `hostslot serve [--name N] [--default P] [--fixed P] -- <command>` | Run a dev server on its port (see [Dev-server ports](#dev-server-ports)) |
 | `hostslot hook claude\|codex [--weight N] [--match REGEX]` | The hook of Claude Code or Codex (registered by `setup`) |
 | `hostslot daemon [--idle 10m]` | Run the daemon in the foreground (not needed normally) |
