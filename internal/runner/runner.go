@@ -45,8 +45,10 @@ type Options struct {
 const JobVar = "JOBGATE_JOB"
 
 // InnerParallelismVars are set to the job's worker share unless CI is set
-// or the variable is already set.
-var InnerParallelismVars = []string{"VITEST_MAX_WORKERS", "npm_config_workspace_concurrency"}
+// or the variable is already set. pnpm 10 reads only the npm_config_ prefix
+// and pnpm 11 only pnpm_config_, so both are set. npm warns about the
+// unknown npm_config_ key, but it is harmless.
+var InnerParallelismVars = []string{"VITEST_MAX_WORKERS", "npm_config_workspace_concurrency", "pnpm_config_workspace_concurrency"}
 
 // Run executes the command and returns its exit code. An error means the
 // command could not be run at all.
