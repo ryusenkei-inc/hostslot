@@ -42,13 +42,13 @@ func read(t *testing.T, path string) string {
 
 func TestClaudeAppendsAndKeepsEverythingElse(t *testing.T) {
 	path := write(t, existing)
-	cmd := HookCommand("C:/bin/jobgate.exe", Claude)
+	cmd := HookCommand("C:/bin/loadslot.exe", Claude)
 	res, err := Register(path, Claude, cmd, false, false)
 	if err != nil || res != Added {
 		t.Fatalf("res %v err %v", res, err)
 	}
 	got := read(t, path)
-	order := []string{`"model"`, `"hooks"`, `"PreToolUse"`, "agent-hook.exe", "jobgate.exe hook claude", `"Stop"`, `"theme"`}
+	order := []string{`"model"`, `"hooks"`, `"PreToolUse"`, "agent-hook.exe", "loadslot.exe hook claude", `"Stop"`, `"theme"`}
 	last := -1
 	for _, s := range order {
 		i := strings.Index(got, s)
@@ -64,17 +64,17 @@ func TestClaudeAppendsAndKeepsEverythingElse(t *testing.T) {
 	if res, err := Register(path, Claude, cmd, false, false); err != nil || res != Unchanged {
 		t.Fatalf("second run: res %v err %v", res, err)
 	}
-	if res, err := Register(path, Claude, HookCommand("D:/new/jobgate.exe", Claude), false, false); err != nil || res != Updated {
+	if res, err := Register(path, Claude, HookCommand("D:/new/loadslot.exe", Claude), false, false); err != nil || res != Updated {
 		t.Fatalf("moved exe: res %v err %v", res, err)
 	}
-	if got := read(t, path); strings.Contains(got, "C:/bin/jobgate.exe") || strings.Count(got, "hook claude") != 1 {
+	if got := read(t, path); strings.Contains(got, "C:/bin/loadslot.exe") || strings.Count(got, "hook claude") != 1 {
 		t.Fatalf("not updated in place:\n%s", got)
 	}
 }
 
 func TestClaudeRemove(t *testing.T) {
 	path := write(t, existing)
-	if _, err := Register(path, Claude, HookCommand("C:/bin/jobgate.exe", Claude), false, false); err != nil {
+	if _, err := Register(path, Claude, HookCommand("C:/bin/loadslot.exe", Claude), false, false); err != nil {
 		t.Fatal(err)
 	}
 	res, err := Register(path, Claude, "", true, false)
@@ -82,7 +82,7 @@ func TestClaudeRemove(t *testing.T) {
 		t.Fatalf("res %v err %v", res, err)
 	}
 	got := read(t, path)
-	if strings.Contains(got, "jobgate") || !strings.Contains(got, "agent-hook.exe") {
+	if strings.Contains(got, "loadslot") || !strings.Contains(got, "agent-hook.exe") {
 		t.Fatalf("remove touched the wrong entries:\n%s", got)
 	}
 	if res, _ := Register(path, Claude, "", true, false); res != Unchanged {
@@ -92,27 +92,27 @@ func TestClaudeRemove(t *testing.T) {
 
 func TestClaudeCreatesMissingFileAndDryRun(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "sub", "settings.json")
-	if res, err := Register(path, Claude, HookCommand("/usr/local/bin/jobgate", Claude), false, true); err != nil || res != Added {
+	if res, err := Register(path, Claude, HookCommand("/usr/local/bin/loadslot", Claude), false, true); err != nil || res != Added {
 		t.Fatalf("dry run: res %v err %v", res, err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("dry run wrote the file")
 	}
-	if _, err := Register(path, Claude, HookCommand("/usr/local/bin/jobgate", Claude), false, false); err != nil {
+	if _, err := Register(path, Claude, HookCommand("/usr/local/bin/loadslot", Claude), false, false); err != nil {
 		t.Fatal(err)
 	}
-	if got := read(t, path); !strings.Contains(got, `"command": "/usr/local/bin/jobgate hook claude"`) {
+	if got := read(t, path); !strings.Contains(got, `"command": "/usr/local/bin/loadslot hook claude"`) {
 		t.Fatalf("unexpected file:\n%s", got)
 	}
 }
 
 func TestHookCommandQuotesSpaces(t *testing.T) {
-	cmd := HookCommand(filepath.Join("/opt", "my tools", "jobgate"), Claude)
-	if cmd != `"/opt/my tools/jobgate" hook claude` {
+	cmd := HookCommand(filepath.Join("/opt", "my tools", "loadslot"), Claude)
+	if cmd != `"/opt/my tools/loadslot" hook claude` {
 		t.Fatalf("got %s", cmd)
 	}
-	if _, ours := jobgateCommand([]byte(`{"hooks":[{"command":`+quote(cmd)+`}]}`), Claude); !ours {
-		t.Fatal("quoted command not recognized as jobgate's")
+	if _, ours := loadslotCommand([]byte(`{"hooks":[{"command":`+quote(cmd)+`}]}`), Claude); !ours {
+		t.Fatal("quoted command not recognized as loadslot's")
 	}
 }
 
@@ -130,16 +130,27 @@ func quote(s string) string { return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"
 
 func TestCodexKeepsOtherGroupsFirst(t *testing.T) {
 	path := write(t, `{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":"C:/ide/codex-hook.cmd","timeout":10}]}]}}`)
-	res, err := Register(path, Codex, HookCommand("C:/bin/jobgate.exe", Codex), false, false)
+	res, err := Register(path, Codex, HookCommand("C:/bin/loadslot.exe", Codex), false, false)
 	if err != nil || res != Added {
 		t.Fatalf("res %v err %v", res, err)
 	}
 	got := read(t, path)
-	if i, j := strings.Index(got, "codex-hook.cmd"), strings.Index(got, "jobgate.exe hook codex"); i < 0 || j < i {
+	if i, j := strings.Index(got, "codex-hook.cmd"), strings.Index(got, "loadslot.exe hook codex"); i < 0 || j < i {
 		t.Fatalf("existing group must stay first:\n%s", got)
 	}
 	// A Claude entry is not the Codex entry.
 	if res, _ := Register(path, Claude, "", true, false); res != Unchanged {
 		t.Fatalf("removing Claude's hook touched Codex's: %v", res)
+	}
+}
+
+func TestRegisterReplacesTheFormerName(t *testing.T) {
+	path := write(t, `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"C:/bin/jobgate.exe hook claude"}]}]}}`)
+	res, err := Register(path, Claude, HookCommand("C:/bin/loadslot.exe", Claude), false, false)
+	if err != nil || res != Updated {
+		t.Fatalf("res %v err %v", res, err)
+	}
+	if got := read(t, path); strings.Contains(got, "jobgate") || strings.Count(got, "hook claude") != 1 {
+		t.Fatalf("former hook not replaced in place:\n%s", got)
 	}
 }

@@ -1,37 +1,39 @@
-# jobgate
+# loadslot
 
-A machine-wide gate for heavy local jobs. Wrap any command, and jobgate admits it only when the machine has room for it:
+A machine-wide gate for heavy local jobs. Wrap any command, and loadslot admits it only when the machine has room for it:
 
 ```sh
-jobgate run --weight 1 -- pnpm check
+loadslot run --weight 1 -- pnpm check
 ```
+
+Formerly `jobgate` (v0.1.0 and v0.2.0). `loadslot setup` replaces a hook registered under the old name, and the first run carries over learned costs and `config.json` from the old data directory. `JOBGATE_*` variables are now `LOADSLOT_*`.
 
 ## Why
 
 Running several coding agents in parallel (each in its own worktree, often across repositories) makes every agent start heavy commands at the same time: type checks, test runners, builds. On a 16 GB machine this exhausts memory. Editors and agent IDEs can cap the number of agents, but nothing coordinates the commands those agents run.
 
-jobgate does, across tools and repositories. It works the same from a plain terminal, any editor, Claude Code hooks, git hooks and package scripts.
+loadslot does, across tools and repositories. It works the same from a plain terminal, any editor, Claude Code hooks, git hooks and package scripts.
 
 ## How it works
 
 - **Slots:** `floor((total memory x 0.6 - reserve) / cost of a weight-1 job)`, capped by the CPU count and at least 1. With the defaults (1 GB reserve, 2 GB per weight-1 job), a 16 GB machine has 4 slots.
 - **Admission:** a job needs free slots for its weight and enough free memory for its estimated peak. The free-memory reading already contains what running jobs use now, so only what they may still grow to is held back: a learned job reports its memory every 2 seconds and holds its remaining headroom (learned peak minus current), since a type check can keep growing for a minute; a job without enough samples holds its estimate for its first 15 seconds. When nothing runs, the next job is always admitted.
 - **Order:** interactive jobs before background jobs, first come first served within each. The head of the queue blocks later jobs, so a heavy job is never starved by lighter ones.
-- **Learning:** jobgate records the peak memory of each wrapped command, including its child processes, keyed by the command and where it runs: inside a git repository, the repository (shared by all of its worktrees) and the path inside it; elsewhere, the directory. `--as` names the work when the command line varies, such as a wrapper script. After 3 runs, the recent peak replaces the weight hint. A command that turns out light takes 1 slot, even with `--weight 3`.
-- **Inner parallelism:** the wrapped command gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency` and `pnpm_config_workspace_concurrency` (pnpm's `--workspace-concurrency`: pnpm 10 reads the first, pnpm 11 the second), unless `CI` is set or the variable is already set. `JOBGATE_WORKERS` is always set for your own scripts.
-- **Nesting:** a `jobgate run` inside a gated command runs directly, since the outer job already holds a slot (jobgate sets `JOBGATE_JOB` for the command). Wrapping at several layers, such as a Claude Code hook, a git hook and package scripts, never deadlocks.
-- **Daemon:** the first `jobgate run` starts a small daemon in the background. The CLI talks to it over a Unix socket or a named pipe. The daemon exits after 10 minutes without jobs. After an upgrade, the first `jobgate run` of the newer version retires an older daemon: the old one stops accepting clients and frees its socket or pipe at once, finishes its current jobs and exits, and the run starts a new daemon. Until then, the two don't see each other's jobs; the free-memory check still sees the memory they use.
-- **Lock fallback:** when the daemon can't start, jobgate falls back to one machine-wide lock per slot. Slots and memory checks still apply, but there is no priority or queue order.
-- **Crash safety:** a job holds its slot through an open connection (or an OS lock in fallback mode). When jobgate or the job is killed, the OS closes it and the slot comes back.
+- **Learning:** loadslot records the peak memory of each wrapped command, including its child processes, keyed by the command and where it runs: inside a git repository, the repository (shared by all of its worktrees) and the path inside it; elsewhere, the directory. `--as` names the work when the command line varies, such as a wrapper script. After 3 runs, the recent peak replaces the weight hint. A command that turns out light takes 1 slot, even with `--weight 3`.
+- **Inner parallelism:** the wrapped command gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency` and `pnpm_config_workspace_concurrency` (pnpm's `--workspace-concurrency`: pnpm 10 reads the first, pnpm 11 the second), unless `CI` is set or the variable is already set. `LOADSLOT_WORKERS` is always set for your own scripts.
+- **Nesting:** a `loadslot run` inside a gated command runs directly, since the outer job already holds a slot (loadslot sets `LOADSLOT_JOB` for the command). Wrapping at several layers, such as a Claude Code hook, a git hook and package scripts, never deadlocks.
+- **Daemon:** the first `loadslot run` starts a small daemon in the background. The CLI talks to it over a Unix socket or a named pipe. The daemon exits after 10 minutes without jobs. After an upgrade, the first `loadslot run` of the newer version retires an older daemon: the old one stops accepting clients and frees its socket or pipe at once, finishes its current jobs and exits, and the run starts a new daemon. Until then, the two don't see each other's jobs; the free-memory check still sees the memory they use.
+- **Lock fallback:** when the daemon can't start, loadslot falls back to one machine-wide lock per slot. Slots and memory checks still apply, but there is no priority or queue order.
+- **Crash safety:** a job holds its slot through an open connection (or an OS lock in fallback mode). When loadslot or the job is killed, the OS closes it and the slot comes back.
 
 ## Install
 
-Download the archive for your OS and CPU (Linux, macOS and Windows; amd64 and arm64) from [Releases](https://github.com/ryusenkei-inc/jobgate/releases), check it against `checksums.txt`, and put `jobgate` (`jobgate.exe`) on your `PATH`.
+Download the archive for your OS and CPU (Linux, macOS and Windows; amd64 and arm64) from [Releases](https://github.com/ryusenkei-inc/loadslot/releases), check it against `checksums.txt`, and put `loadslot` (`loadslot.exe`) on your `PATH`.
 
 Or build it with Go 1.26 or later:
 
 ```sh
-go install github.com/ryusenkei-inc/jobgate/cmd/jobgate@latest
+go install github.com/ryusenkei-inc/loadslot/cmd/loadslot@latest
 ```
 
 Make sure `$(go env GOPATH)/bin` is on your `PATH`.
@@ -39,42 +41,42 @@ Make sure `$(go env GOPATH)/bin` is on your `PATH`.
 Then connect your coding agents and check the result:
 
 ```sh
-jobgate setup    # register the hooks of the agents it finds (Claude Code)
-jobgate doctor   # check the binary, the daemon and the hooks
+loadslot setup    # register the hooks of the agents it finds (Claude Code)
+loadslot doctor   # check the binary, the daemon and the hooks
 ```
 
-To upgrade, replace the binary. On Windows a running daemon keeps `jobgate.exe` open: rename the old file first, then put the new one in place. The next `jobgate run` retires the old daemon.
+To upgrade, replace the binary. On Windows a running daemon keeps `loadslot.exe` open: rename the old file first, then put the new one in place. The next `loadslot run` retires the old daemon.
 
 ## Usage
 
 ```sh
-jobgate run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
+loadslot run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
             [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
-jobgate status [--json]
-jobgate daemon [--idle 10m]
-jobgate hook claude [--weight N] [--match REGEX]
-jobgate setup [claude] [--remove] [--dry-run] [--settings PATH]
-jobgate doctor
-jobgate version
+loadslot status [--json]
+loadslot daemon [--idle 10m]
+loadslot hook claude [--weight N] [--match REGEX]
+loadslot setup [claude] [--remove] [--dry-run] [--settings PATH]
+loadslot doctor
+loadslot version
 ```
 
 - `run` waits for admission, printing a status line to stderr every 5 seconds, then runs the command with stdin, stdout and stderr passed through. It exits with the command's exit code (`128 + signal` when killed by a signal, `127` when the command isn't found, `75` when `--max-wait` ran out, `124` when `--timeout` stopped it).
-- `--weight` is the expected cost in slots. It only matters until jobgate has learned the command.
+- `--weight` is the expected cost in slots. It only matters until loadslot has learned the command.
 - `--priority` defaults to `interactive` when stdin is a terminal and `background` otherwise.
-- `--as` names the work for learning instead of the command line, e.g. `jobgate run --as "pnpm test" -- sh -c 'pnpm test 2>&1 | tail'`.
+- `--as` names the work for learning instead of the command line, e.g. `loadslot run --as "pnpm test" -- sh -c 'pnpm test 2>&1 | tail'`.
 - `--max-wait 5m` gives up waiting for a slot after 5 minutes (exit `75`, retry later). The command never runs without a slot.
 - `--timeout 2m` stops the command's process tree after it has run for 2 minutes (exit `124`). A stopped run is not learned.
-- `--source claude` names who started the job (default: `$JOBGATE_SOURCE`), shown in `status`. The job also records `ORCA_PANE_KEY`, `ORCA_TAB_ID` and `ORCA_WORKTREE_ID` when set, so `status --json` tells which Orca pane a job belongs to.
-- Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
+- `--source claude` names who started the job (default: `$LOADSLOT_SOURCE`), shown in `status`. The job also records `ORCA_PANE_KEY`, `ORCA_TAB_ID` and `ORCA_WORKTREE_ID` when set, so `status --json` tells which Orca pane a job belongs to.
+- Ctrl+C reaches the command as usual, and loadslot waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
 - `hook claude` is a Claude Code hook. `setup` registers it for every agent it finds, or for the one named (see [Claude Code](#claude-code)).
-- `doctor` checks the binary, whether `jobgate` on the `PATH` is the same file, the daemon (running, version), and each agent's hook (registered, pointing at an existing jobgate), and tells how to fix each problem. It exits 1 on warnings or errors.
+- `doctor` checks the binary, whether `loadslot` on the `PATH` is the same file, the daemon (running, version), and each agent's hook (registered, pointing at an existing loadslot), and tells how to fix each problem. It exits 1 on warnings or errors.
 
 Example:
 
 ```text
-$ jobgate status
+$ loadslot status
 mode:    daemon pid 17048
 slots:   1/1 used
 memory:  4396 MB free of 16325 MB
@@ -94,15 +96,15 @@ waiting (1)
 
 ### Claude Code
 
-`jobgate hook claude` is a `PreToolUse` hook that rewrites heavy Bash commands to run through jobgate. Register it for every repository with:
+`loadslot hook claude` is a `PreToolUse` hook that rewrites heavy Bash commands to run through loadslot. Register it for every repository with:
 
 ```sh
-jobgate setup            # add or update the hook in Claude Code's user settings
-jobgate setup --dry-run  # show what would change
-jobgate setup --remove   # remove it
+loadslot setup            # add or update the hook in Claude Code's user settings
+loadslot setup --dry-run  # show what would change
+loadslot setup --remove   # remove it
 ```
 
-`setup` edits only jobgate's own entry in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`; `--settings` picks another file). Other keys keep their order and other tools' hooks stay as they are; the entry goes after existing `PreToolUse` groups. It points the hook at the running `jobgate`: at the path on the `PATH` when that is the same file (a package manager's link such as Homebrew's `bin` or WinGet's `Links`, which survives upgrades), otherwise at the executable itself. Run it again after moving the binary; `jobgate doctor` tells when that is needed. The result is equivalent to:
+`setup` edits only loadslot's own entry in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`; `--settings` picks another file). Other keys keep their order and other tools' hooks stay as they are; the entry goes after existing `PreToolUse` groups. It points the hook at the running `loadslot`: at the path on the `PATH` when that is the same file (a package manager's link such as Homebrew's `bin` or WinGet's `Links`, which survives upgrades), otherwise at the executable itself. Run it again after moving the binary; `loadslot doctor` tells when that is needed. The result is equivalent to:
 
 ```json
 {
@@ -110,7 +112,7 @@ jobgate setup --remove   # remove it
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "jobgate hook claude" }]
+        "hooks": [{ "type": "command", "command": "loadslot hook claude" }]
       }
     ]
   }
@@ -118,9 +120,9 @@ jobgate setup --remove   # remove it
 ```
 
 - The line is parsed as Bash. It is heavy when any of its commands, including those in `$(...)`, subshells and `sh -c` / `bash -c` scripts, is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. Text in quotes, heredocs and comments never counts. `--match <regex>` replaces this list. A line that doesn't parse is left alone.
-- The whole line becomes `'<path to jobgate>' run --weight 1 --priority background --source claude --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. The absolute path works without jobgate on the `PATH` and skips shims, which would add hundreds of milliseconds to every call. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
+- The whole line becomes `'<path to loadslot>' run --weight 1 --priority background --source claude --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. The absolute path works without loadslot on the `PATH` and skips shims, which would add hundreds of milliseconds to every call. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
 - Light commands (`git`, `pnpm install`, formatters, prose linters) are left alone, so they never wait. `git push` is left alone too: gate the `pre-push` hook instead (see below).
-- On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `JOBGATE_DISABLE=1` in its environment or in the command line, it does nothing.
+- On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `LOADSLOT_DISABLE=1` in its environment or in the command line, it does nothing.
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it.
 
 Waiting for a slot doesn't eat into the command's own timeout. The hook raises the Bash tool's timeout to its maximum (10 minutes), keeps the command's timeout (as asked, or the 2-minute default, at most 9 minutes) as `--timeout`, and gives the rest to `--max-wait`. When no slot frees up in time, the call fails with exit `75` and a message, so the agent can retry. Background calls (`run_in_background`) wait without a limit.
@@ -131,23 +133,23 @@ Waiting for a slot doesn't eat into the command's own timeout. The hook raises t
 
 ```sh
 #!/bin/sh
-exec jobgate run --weight 2 -- pnpm check
+exec loadslot run --weight 2 -- pnpm check
 ```
 
-The shared `pre-push` of [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) 0.3.1 or later does this when jobgate is on the `PATH`.
+The shared `pre-push` of [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) does this when loadslot (or `jobgate` in versions before the rename) is on the `PATH`.
 
 ### Package scripts
 
 ```json
 {
   "scripts": {
-    "check": "jobgate run --weight 2 -- pnpm run check:all",
-    "test": "jobgate run -- vitest run"
+    "check": "loadslot run --weight 2 -- pnpm run check:all",
+    "test": "loadslot run -- vitest run"
   }
 }
 ```
 
-For contributors without jobgate, keep the unwrapped script under another name, or set `JOBGATE_DISABLE=1` where jobgate is installed but not wanted (for example in CI).
+For contributors without loadslot, keep the unwrapped script under another name, or set `LOADSLOT_DISABLE=1` where loadslot is installed but not wanted (for example in CI).
 
 ## Configuration
 
@@ -165,22 +167,22 @@ Optional `config.json` in the data directory. The daemon rereads it every second
 
 | Variable | Effect |
 | --- | --- |
-| `JOBGATE_SLOTS` | Fixed number of slots instead of the computed one |
-| `JOBGATE_COST_MB` | Assumed peak memory of a weight-1 job without samples |
-| `JOBGATE_RESERVE_MB` | Memory kept free for the editor, browsers and agents |
-| `JOBGATE_PRIORITY` | Default priority: `interactive` or `background` |
-| `JOBGATE_DISABLE=1` | Run commands directly, without the gate |
-| `JOBGATE_NO_DAEMON=1` | Skip the daemon and use the lock fallback |
-| `JOBGATE_SOURCE` | Default `--source` of `jobgate run` |
-| `JOBGATE_HOME` | Data directory. It also isolates the daemon, so separate homes don't share slots |
+| `LOADSLOT_SLOTS` | Fixed number of slots instead of the computed one |
+| `LOADSLOT_COST_MB` | Assumed peak memory of a weight-1 job without samples |
+| `LOADSLOT_RESERVE_MB` | Memory kept free for the editor, browsers and agents |
+| `LOADSLOT_PRIORITY` | Default priority: `interactive` or `background` |
+| `LOADSLOT_DISABLE=1` | Run commands directly, without the gate |
+| `LOADSLOT_NO_DAEMON=1` | Skip the daemon and use the lock fallback |
+| `LOADSLOT_SOURCE` | Default `--source` of `loadslot run` |
+| `LOADSLOT_HOME` | Data directory. It also isolates the daemon, so separate homes don't share slots |
 
 Environment variables take precedence over `config.json`. The daemon reads them when it starts, so set them where the daemon is started, or use `config.json`.
 
 | OS | Data directory |
 | --- | --- |
-| Linux | `$XDG_DATA_HOME/jobgate` (`~/.local/share/jobgate`); socket and locks in `$XDG_RUNTIME_DIR/jobgate` when set |
-| macOS | `~/Library/Application Support/jobgate` |
-| Windows | `%LOCALAPPDATA%\jobgate` |
+| Linux | `$XDG_DATA_HOME/loadslot` (`~/.local/share/loadslot`); socket and locks in `$XDG_RUNTIME_DIR/loadslot` when set |
+| macOS | `~/Library/Application Support/loadslot` |
+| Windows | `%LOCALAPPDATA%\loadslot` |
 
 The data directory holds `config.json`, `samples.json` (the last 10 peaks per command and directory) and `daemon.log`.
 
@@ -197,7 +199,7 @@ The data directory holds `config.json`, `samples.json` (the last 10 peaks per co
 
 Limitations:
 
-- Hard memory limits (cgroup `memory.max`, Job Object limits) are not enforced yet. jobgate only watches.
+- Hard memory limits (cgroup `memory.max`, Job Object limits) are not enforced yet. loadslot only watches.
 - Polling on Linux and macOS can miss peaks shorter than 250 ms in descendants.
 - On Windows, a child started in the first instant before the process joins the Job Object can escape tracking.
 - Other Unix systems build, but report no memory and track only the root process.
@@ -206,39 +208,39 @@ Limitations:
 
 | Path | Purpose | Depends on |
 | --- | --- | --- |
-| `cmd/jobgate` | CLI: `run`, `status`, `daemon`, `hook`, `setup`, `doctor` | `internal/*` |
+| `cmd/loadslot` | CLI: `run`, `status`, `daemon`, `hook`, `setup`, `doctor` | `internal/*` |
 | `internal/gate` | Scheduler core, OS-independent and pure: slots, admission, priority, learning estimates | — |
 | `internal/platform` | OS ports: metrics, process tracking, IPC, locks, paths. One file per OS, selected by build tags | — |
 | `internal/store` | Learning samples in `samples.json` | — |
 | `internal/jobkey` | Learning keys: repository (across worktrees), path inside it, label | — |
 | `internal/config` | `config.json` and environment overrides | `internal/gate` |
 | `internal/daemon` | Daemon and client: admission over IPC, started on demand | `internal/gate`, `internal/platform`, `internal/store` |
-| `internal/hook` | Agent hooks: rewrite heavy commands to `jobgate run`, text only | — |
+| `internal/hook` | Agent hooks: rewrite heavy commands to `loadslot run`, text only | — |
 | `internal/setup` | Register agent hooks in the agents' settings files, keeping other entries and key order; find installed agents and stable paths | — |
-| `internal/runner` | `jobgate run`: acquire (daemon or lock fallback), run, release, record | all of the above |
-| `apps/` | TypeScript packages in a pnpm workspace, such as the Orca plugin (`apps/orca-plugin`) | the `jobgate` CLI |
+| `internal/runner` | `loadslot run`: acquire (daemon or lock fallback), run, release, record | all of the above |
+| `apps/` | TypeScript packages in a pnpm workspace, such as the Orca plugin (`apps/orca-plugin`) | the `loadslot` CLI |
 | `scripts/` | Repository operations, such as managing `.env` | — |
 
-The Go module stays at the repository root, so `go install github.com/ryusenkei-inc/jobgate/cmd/jobgate@latest` and `v*` tags work as for any Go tool. TypeScript packages live in `apps/` and have no runtime dependencies on each other or on the Go code; they call the `jobgate` CLI.
+The Go module stays at the repository root, so `go install github.com/ryusenkei-inc/loadslot/cmd/loadslot@latest` and `v*` tags work as for any Go tool. TypeScript packages live in `apps/` and have no runtime dependencies on each other or on the Go code; they call the `loadslot` CLI.
 
 Dev tooling: [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) (shared rules, Claude Code hooks and shared files such as `.editorconfig`, `.gitignore` and `.github/dependabot.yaml`; don't edit them by hand) and [`@ryusenkei/prose-lint`](https://www.npmjs.com/package/@ryusenkei/prose-lint) (Markdown, comments and commit messages).
 
 ## Commands
 
 ```sh
-go build ./cmd/jobgate         # build the CLI
+go build ./cmd/loadslot         # build the CLI
 go test ./...                  # tests
 pnpm install                   # dev tooling and the commit-msg hook
 pnpm lint                      # typecheck (scripts/, apps/*), prose-lint, shared-file check, go vet
 pnpm test                      # go test ./... and Vitest
-pnpm check                     # lint and test (run by the pre-push hook, through jobgate when installed)
+pnpm check                     # lint and test (run by the pre-push hook, through loadslot when installed)
 npx ryusenkei-conventions sync # write the shared files from @ryusenkei/conventions
 node scripts/env.ts run <cmd>  # run a command with .env loaded
 pnpm env:push [--dry-run]      # push .env values to GitHub Variables / Secrets
 pnpm repo:settings             # apply GitHub repository settings (squash merge only)
 ```
 
-Releases: pushing a `v*` tag runs `.github/workflows/release.yaml`, which tests and publishes binaries with GoReleaser (`.goreleaser.yaml`). `jobgate version` reports the tag through Go's VCS stamping.
+Releases: pushing a `v*` tag runs `.github/workflows/release.yaml`, which tests and publishes binaries with GoReleaser (`.goreleaser.yaml`). `loadslot version` reports the tag through Go's VCS stamping.
 
 CI (`.github/workflows/ci.yaml`) runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles for all three, and runs the TypeScript typecheck and Vitest, prose, PR title and secret checks.
 

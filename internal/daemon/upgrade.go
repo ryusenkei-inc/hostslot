@@ -8,7 +8,7 @@ import (
 
 	"golang.org/x/mod/semver"
 
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
 )
 
 // Version is the module version of this binary, or "" for a development

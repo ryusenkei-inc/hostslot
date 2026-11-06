@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ryusenkei-inc/jobgate/internal/daemon"
-	"github.com/ryusenkei-inc/jobgate/internal/gate"
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
-	"github.com/ryusenkei-inc/jobgate/internal/store"
+	"github.com/ryusenkei-inc/loadslot/internal/daemon"
+	"github.com/ryusenkei-inc/loadslot/internal/gate"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/store"
 )
 
 // lease is an admission from either the daemon or the lock fallback.
@@ -32,7 +32,7 @@ const statusEvery = 5 * time.Second
 func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, deadline time.Time, noDaemon bool, stderr io.Writer) (*lease, error) {
 	if !noDaemon {
 		if daemon.RetireOlder(p, daemon.Version()) {
-			fmt.Fprintln(stderr, "jobgate: retired an older daemon; it exits after its current jobs")
+			fmt.Fprintln(stderr, "loadslot: retired an older daemon; it exits after its current jobs")
 		}
 		c, err := daemon.Connect(p)
 		if err == nil {
@@ -43,7 +43,7 @@ func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, deadline t
 				}
 				last = time.Now()
 				s := m.Status
-				fmt.Fprintf(stderr, "jobgate: waiting (position %d of %d, slots %d/%d used, %d MB free, needs ~%d MB)\n",
+				fmt.Fprintf(stderr, "loadslot: waiting (position %d of %d, slots %d/%d used, %d MB free, needs ~%d MB)\n",
 					m.Position, len(s.Snapshot.Waiting), s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB, m.Job.EstimateMB)
 			})
 			if err == nil {
@@ -53,9 +53,9 @@ func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, deadline t
 			if errors.Is(err, daemon.ErrBusy) {
 				return nil, err
 			}
-			fmt.Fprintf(stderr, "jobgate: daemon error, using lock fallback: %v\n", err)
+			fmt.Fprintf(stderr, "loadslot: daemon error, using lock fallback: %v\n", err)
 		} else {
-			fmt.Fprintf(stderr, "jobgate: no daemon (%v), using lock fallback\n", err)
+			fmt.Fprintf(stderr, "loadslot: no daemon (%v), using lock fallback\n", err)
 		}
 	}
 	return acquireLocks(p, cfg, req, deadline, stderr)
@@ -99,7 +99,7 @@ func acquireLocks(p *platform.Platform, cfg gate.Config, req gate.Request, deadl
 		if time.Since(last) >= statusEvery {
 			last = time.Now()
 			m, _ := p.Metrics.Memory()
-			fmt.Fprintf(stderr, "jobgate: waiting (lock fallback, %d slots, %d MB free, needs ~%d MB)\n", slots, m.FreeMB, est)
+			fmt.Fprintf(stderr, "loadslot: waiting (lock fallback, %d slots, %d MB free, needs ~%d MB)\n", slots, m.FreeMB, est)
 		}
 		time.Sleep(250 * time.Millisecond)
 	}

@@ -1,4 +1,4 @@
-// Command jobgate is a machine-wide gate for heavy local jobs.
+// Command loadslot is a machine-wide gate for heavy local jobs.
 package main
 
 import (
@@ -17,36 +17,36 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/ryusenkei-inc/jobgate/internal/config"
-	"github.com/ryusenkei-inc/jobgate/internal/daemon"
-	"github.com/ryusenkei-inc/jobgate/internal/gate"
-	"github.com/ryusenkei-inc/jobgate/internal/hook"
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
-	"github.com/ryusenkei-inc/jobgate/internal/runner"
-	"github.com/ryusenkei-inc/jobgate/internal/setup"
-	"github.com/ryusenkei-inc/jobgate/internal/store"
+	"github.com/ryusenkei-inc/loadslot/internal/config"
+	"github.com/ryusenkei-inc/loadslot/internal/daemon"
+	"github.com/ryusenkei-inc/loadslot/internal/gate"
+	"github.com/ryusenkei-inc/loadslot/internal/hook"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/runner"
+	"github.com/ryusenkei-inc/loadslot/internal/setup"
+	"github.com/ryusenkei-inc/loadslot/internal/store"
 )
 
-const usage = `jobgate: a machine-wide gate for heavy local jobs
+const usage = `loadslot: a machine-wide gate for heavy local jobs
 
 Usage:
-  jobgate run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
+  loadslot run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
               [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
-  jobgate status [--json]
-  jobgate daemon
-  jobgate hook claude [--weight N] [--match REGEX]
-  jobgate setup [claude] [--remove] [--dry-run] [--settings PATH]
-  jobgate doctor
-  jobgate version
+  loadslot status [--json]
+  loadslot daemon
+  loadslot hook claude [--weight N] [--match REGEX]
+  loadslot setup [claude] [--remove] [--dry-run] [--settings PATH]
+  loadslot doctor
+  loadslot version
 
 Environment:
-  JOBGATE_SLOTS       override the computed number of slots
-  JOBGATE_COST_MB     assumed peak memory of a weight-1 job without samples
-  JOBGATE_RESERVE_MB  memory kept free for everything else
-  JOBGATE_PRIORITY    default priority (interactive or background)
-  JOBGATE_DISABLE=1   run commands directly without the gate
-  JOBGATE_NO_DAEMON=1 use the machine-wide lock fallback instead of the daemon
-  JOBGATE_HOME        data directory (also isolates the daemon)
+  LOADSLOT_SLOTS       override the computed number of slots
+  LOADSLOT_COST_MB     assumed peak memory of a weight-1 job without samples
+  LOADSLOT_RESERVE_MB  memory kept free for everything else
+  LOADSLOT_PRIORITY    default priority (interactive or background)
+  LOADSLOT_DISABLE=1   run commands directly without the gate
+  LOADSLOT_NO_DAEMON=1 use the machine-wide lock fallback instead of the daemon
+  LOADSLOT_HOME        data directory (also isolates the daemon)
 `
 
 func main() {
@@ -78,15 +78,15 @@ func run(args []string) int {
 		fmt.Print(usage)
 		return 0
 	}
-	fmt.Fprintf(os.Stderr, "jobgate: unknown command %q\n\n%s", args[0], usage)
+	fmt.Fprintf(os.Stderr, "loadslot: unknown command %q\n\n%s", args[0], usage)
 	return 2
 }
 
 func version() string {
 	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" {
-		return "jobgate " + info.Main.Version
+		return "loadslot " + info.Main.Version
 	}
-	return "jobgate (devel)"
+	return "loadslot (devel)"
 }
 
 func nativePlatform() (*platform.Platform, error) {
@@ -98,7 +98,7 @@ func nativePlatform() (*platform.Platform, error) {
 }
 
 func fail(err error) int {
-	fmt.Fprintf(os.Stderr, "jobgate: %v\n", err)
+	fmt.Fprintf(os.Stderr, "loadslot: %v\n", err)
 	return 2
 }
 
@@ -107,7 +107,7 @@ func cmdRun(args []string) int {
 	weight := fs.Int("weight", 1, "relative cost of the job in slots; a hint until samples exist")
 	prio := fs.String("priority", "", "interactive or background (default: interactive when stdin is a terminal)")
 	label := fs.String("as", "", "name the work for learning (default: the command line)")
-	source := fs.String("source", os.Getenv("JOBGATE_SOURCE"), "who starts the job, shown in status (default: $JOBGATE_SOURCE)")
+	source := fs.String("source", os.Getenv("LOADSLOT_SOURCE"), "who starts the job, shown in status (default: $LOADSLOT_SOURCE)")
 	maxWait := fs.Duration("max-wait", 0, "give up waiting for a slot after this long and exit 75 (0 = wait forever)")
 	timeout := fs.Duration("timeout", 0, "stop the command after it has run this long and exit 124 (0 = none)")
 	if err := fs.Parse(args); err != nil {
@@ -115,7 +115,7 @@ func cmdRun(args []string) int {
 	}
 	cmd := fs.Args()
 	if len(cmd) == 0 {
-		fmt.Fprintln(os.Stderr, "jobgate run: missing command (jobgate run -- <command> [args...])")
+		fmt.Fprintln(os.Stderr, "loadslot run: missing command (loadslot run -- <command> [args...])")
 		return 2
 	}
 	priority, err := resolvePriority(*prio)
@@ -142,9 +142,10 @@ func cmdRun(args []string) int {
 		Stdin:    os.Stdin,
 		Stdout:   os.Stdout,
 		Stderr:   os.Stderr,
-		NoDaemon: os.Getenv("JOBGATE_NO_DAEMON") == "1",
-		Disable:  os.Getenv("JOBGATE_DISABLE") == "1",
-		Nested:   os.Getenv(runner.JobVar) != "",
+		NoDaemon: os.Getenv("LOADSLOT_NO_DAEMON") == "1",
+		Disable:  os.Getenv("LOADSLOT_DISABLE") == "1",
+		// JOBGATE_JOB: an outer job of jobgate, the former name, during an upgrade
+		Nested: os.Getenv(runner.JobVar) != "" || os.Getenv("JOBGATE_JOB") != "",
 	})
 	if err != nil {
 		return fail(err)
@@ -155,7 +156,7 @@ func cmdRun(args []string) int {
 func resolvePriority(flagValue string) (gate.Priority, error) {
 	v := flagValue
 	if v == "" {
-		v = os.Getenv("JOBGATE_PRIORITY")
+		v = os.Getenv("LOADSLOT_PRIORITY")
 	}
 	if v == "" {
 		if st, err := os.Stdin.Stat(); err == nil && st.Mode()&os.ModeCharDevice != 0 {
@@ -174,7 +175,7 @@ func resolvePriority(flagValue string) (gate.Priority, error) {
 // hook error and runs the command unchanged, while 2 would block it.
 func cmdHook(args []string) int {
 	if len(args) == 0 || args[0] != "claude" {
-		fmt.Fprintln(os.Stderr, "jobgate hook: missing agent (jobgate hook claude)")
+		fmt.Fprintln(os.Stderr, "loadslot hook: missing agent (loadslot hook claude)")
 		return 1
 	}
 	fs := flag.NewFlagSet("hook claude", flag.ContinueOnError)
@@ -183,7 +184,7 @@ func cmdHook(args []string) int {
 	if err := fs.Parse(args[1:]); err != nil {
 		return 1
 	}
-	if os.Getenv("JOBGATE_DISABLE") == "1" {
+	if os.Getenv("LOADSLOT_DISABLE") == "1" {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return 0
 	}
@@ -191,13 +192,13 @@ func cmdHook(args []string) int {
 	if *match != "" {
 		re, err := regexp.Compile(*match)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "jobgate hook: --match: %v\n", err)
+			fmt.Fprintf(os.Stderr, "loadslot hook: --match: %v\n", err)
 			return 1
 		}
 		o.Heavy = re
 	}
 	if err := hook.Claude(os.Stdin, os.Stdout, o); err != nil {
-		fmt.Fprintf(os.Stderr, "jobgate hook: %v\n", err)
+		fmt.Fprintf(os.Stderr, "loadslot hook: %v\n", err)
 		return 1
 	}
 	return 0
@@ -210,21 +211,21 @@ func cmdSetup(args []string) int {
 	named := len(args) > 0 && !strings.HasPrefix(args[0], "-")
 	if named {
 		if !slices.Contains(setup.Agents, setup.Agent(args[0])) {
-			fmt.Fprintf(os.Stderr, "jobgate setup: unknown agent %q (claude)\n", args[0])
+			fmt.Fprintf(os.Stderr, "loadslot setup: unknown agent %q (claude)\n", args[0])
 			return 2
 		}
 		agents = []setup.Agent{setup.Agent(args[0])}
 		args = args[1:]
 	}
 	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
-	remove := fs.Bool("remove", false, "remove jobgate's hooks instead of adding them")
+	remove := fs.Bool("remove", false, "remove loadslot's hooks instead of adding them")
 	dryRun := fs.Bool("dry-run", false, "report what would change without writing")
 	path := fs.String("settings", "", "hooks file (only with an agent; default: the agent's user-level file)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if *path != "" && !named {
-		fmt.Fprintln(os.Stderr, "jobgate setup: --settings needs an agent (jobgate setup claude --settings PATH)")
+		fmt.Fprintln(os.Stderr, "loadslot setup: --settings needs an agent (loadslot setup claude --settings PATH)")
 		return 2
 	}
 	exe, err := setupExe(*remove)
@@ -251,7 +252,7 @@ func cmdSetup(args []string) int {
 			setup.Unchanged: "already up to date",
 			setup.Added:     "added the PreToolUse hook `" + command + "`",
 			setup.Updated:   "updated the PreToolUse hook to `" + command + "`",
-			setup.Removed:   "removed jobgate's PreToolUse hook",
+			setup.Removed:   "removed loadslot's PreToolUse hook",
 		}[res]
 		if *dryRun && res != setup.Unchanged {
 			verb = "would have " + verb
@@ -260,12 +261,12 @@ func cmdSetup(args []string) int {
 		done++
 	}
 	if done == 0 {
-		fmt.Println("No supported agent found (Claude Code). Install one, or name it: jobgate setup claude")
+		fmt.Println("No supported agent found (Claude Code). Install one, or name it: loadslot setup claude")
 	}
 	return 0
 }
 
-// setupExe is the jobgate path to write into hook settings: a stable path
+// setupExe is the loadslot path to write into hook settings: a stable path
 // on the PATH when there is one for this binary (see setup.StableExe).
 func setupExe(remove bool) (string, error) {
 	exe, err := os.Executable()
@@ -278,7 +279,7 @@ func setupExe(remove bool) (string, error) {
 	// A `go run` binary is deleted when it exits, which would leave a hook
 	// that fails on every Bash call.
 	if !remove && strings.Contains(filepath.ToSlash(exe), "/go-build") {
-		return "", errors.New("run setup from an installed jobgate, not `go run`")
+		return "", errors.New("run setup from an installed loadslot, not `go run`")
 	}
 	return setup.StableExe(exe), nil
 }
@@ -304,7 +305,7 @@ func cmdDaemon(args []string) int {
 	}
 	err = daemon.Run(p, srv)
 	if errors.Is(err, daemon.ErrRunning) {
-		fmt.Fprintln(os.Stderr, "jobgate: daemon already running")
+		fmt.Fprintln(os.Stderr, "loadslot: daemon already running")
 		return 0
 	}
 	if err != nil {
@@ -418,13 +419,13 @@ func truncate(s string, n int) string {
 	return strings.TrimSpace(s[:n-3]) + "..."
 }
 
-// hookExe is the jobgate the hook's rewritten commands run: this binary, so
+// hookExe is the loadslot the hook's rewritten commands run: this binary, so
 // they need no PATH lookup, unless it is a `go run` build that is about to
 // be deleted.
 func hookExe() string {
 	exe, err := os.Executable()
 	if err != nil || strings.Contains(filepath.ToSlash(exe), "/go-build") {
-		return "jobgate"
+		return "loadslot"
 	}
 	return exe
 }

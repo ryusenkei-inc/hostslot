@@ -9,9 +9,9 @@ import (
 
 func exeName() string {
 	if runtime.GOOS == "windows" {
-		return "jobgate.exe"
+		return "loadslot.exe"
 	}
-	return "jobgate"
+	return "loadslot"
 }
 
 func TestStableExePrefersALinkOnThePath(t *testing.T) {
@@ -32,7 +32,7 @@ func TestStableExePrefersALinkOnThePath(t *testing.T) {
 		t.Fatalf("got %s, want the link %s", got, link)
 	}
 
-	// Another file named jobgate on the PATH, such as a shim, is not used.
+	// Another file named loadslot on the PATH, such as a shim, is not used.
 	other := t.TempDir()
 	if err := os.WriteFile(filepath.Join(other, exeName()), []byte("shim"), 0o755); err != nil {
 		t.Fatal(err)
@@ -48,12 +48,12 @@ func TestFind(t *testing.T) {
 	if _, found, err := Find(path, Claude); err != nil || found {
 		t.Fatalf("found %v err %v before registering", found, err)
 	}
-	cmd := HookCommand("C:/bin/jobgate.exe", Claude)
+	cmd := HookCommand("C:/bin/loadslot.exe", Claude)
 	if _, err := Register(path, Claude, cmd, false, false); err != nil {
 		t.Fatal(err)
 	}
 	got, found, err := Find(path, Claude)
-	if err != nil || !found || got != cmd || HookExe(got, Claude) != "C:/bin/jobgate.exe" {
+	if err != nil || !found || got != cmd || HookExe(got, Claude) != "C:/bin/loadslot.exe" {
 		t.Fatalf("got %q %v %v", got, found, err)
 	}
 	if _, found, err := Find(filepath.Join(t.TempDir(), "none.json"), Claude); err != nil || found {

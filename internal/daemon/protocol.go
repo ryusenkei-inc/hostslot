@@ -7,9 +7,9 @@
 package daemon
 
 import (
-	"github.com/ryusenkei-inc/jobgate/internal/gate"
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
-	"github.com/ryusenkei-inc/jobgate/internal/store"
+	"github.com/ryusenkei-inc/loadslot/internal/gate"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/store"
 )
 
 // Client operations.
@@ -48,7 +48,7 @@ type Message struct {
 	Error    string    `json:"error,omitempty"`
 }
 
-// Status describes the gate for `jobgate status`.
+// Status describes the gate for `loadslot status`.
 type Status struct {
 	Mode     string                `json:"mode"`
 	PID      int                   `json:"pid,omitempty"`
