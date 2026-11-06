@@ -48,9 +48,20 @@ type Capabilities struct {
 	Method string `json:"method"`
 }
 
+// StartOptions change how a tracked command runs.
+type StartOptions struct {
+	// Background lowers the OS priority of the command and its descendants,
+	// so people's interactive work stays responsive (CPU is shared, not
+	// guarded).
+	Background bool
+	// Cleanup stops processes the command leaves running after it exits,
+	// such as test workers and browsers.
+	Cleanup bool
+}
+
 // ProcessTracker starts commands and tracks their process tree.
 type ProcessTracker interface {
-	Start(cmd *exec.Cmd) (Process, error)
+	Start(cmd *exec.Cmd, o StartOptions) (Process, error)
 	Capabilities() Capabilities
 }
 

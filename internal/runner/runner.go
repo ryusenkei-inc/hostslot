@@ -52,6 +52,9 @@ type Options struct {
 	// Timeout kills the command's process tree after this long once it runs
 	// (0 = none) and exits with ExitTimeout.
 	Timeout time.Duration
+	// KeepChildren leaves processes the command started running after it
+	// exits; by default they are stopped.
+	KeepChildren bool
 }
 
 // Exit codes of loadslot itself.
@@ -184,7 +187,7 @@ func execute(p *platform.Platform, o Options, env []string, peak *uint64, report
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigs)
 
-	proc, err := p.Tracker.Start(cmd)
+	proc, err := p.Tracker.Start(cmd, platform.StartOptions{Background: o.Priority == gate.Background, Cleanup: !o.KeepChildren})
 	if err != nil {
 		var notFound *exec.Error
 		if errors.As(err, &notFound) {

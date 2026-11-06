@@ -27,11 +27,22 @@ func (nativeTracker) Capabilities() Capabilities {
 	return Capabilities{TreeMemory: treeSupported, Method: treeMethod}
 }
 
-func (nativeTracker) Start(cmd *exec.Cmd) (Process, error) {
+// backgroundNice is the niceness of background jobs; descendants inherit it.
+const backgroundNice = 10
+
+// cleanupGrace is how long leftover processes get to exit after SIGTERM.
+const cleanupGrace = 500 * time.Millisecond
+
+func (nativeTracker) Start(cmd *exec.Cmd, o StartOptions) (Process, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
-	p := &pollProcess{cmd: cmd, done: make(chan struct{})}
+	if o.Background {
+		// Right after start: a child forked in between keeps the normal
+		// priority, the rest of the tree inherits this one.
+		_ = unix.Setpriority(unix.PRIO_PROCESS, cmd.Process.Pid, backgroundNice)
+	}
+	p := &pollProcess{cmd: cmd, done: make(chan struct{}), cleanup: o.Cleanup, seen: map[int]struct{}{}}
 	go p.poll()
 	return p, nil
 }
@@ -40,8 +51,13 @@ type pollProcess struct {
 	cmd     *exec.Cmd
 	peak    atomic.Uint64
 	current atomic.Uint64
-	done    chan struct{}
-	once    sync.Once
+	cleanup bool
+	// seen holds every descendant a poll found. Orphans are reparented when
+	// the root exits, so they can only be found by what was seen before.
+	mu   sync.Mutex
+	seen map[int]struct{}
+	done chan struct{}
+	once sync.Once
 }
 
 func (p *pollProcess) Pid() int { return p.cmd.Process.Pid }
@@ -50,9 +66,14 @@ func (p *pollProcess) poll() {
 	t := time.NewTicker(pollInterval)
 	defer t.Stop()
 	for {
-		if rss, _ := treeRSS(p.Pid()); rss > 0 {
+		if rss, pids := treeRSS(p.Pid()); rss > 0 {
 			p.current.Store(rss / mib)
 			p.raise(rss / mib)
+			p.mu.Lock()
+			for _, pid := range pids {
+				p.seen[pid] = struct{}{}
+			}
+			p.mu.Unlock()
 		}
 		select {
 		case <-p.done:
@@ -75,6 +96,9 @@ func (p *pollProcess) raise(mb uint64) {
 func (p *pollProcess) Wait() error {
 	err := p.cmd.Wait()
 	p.once.Do(func() { close(p.done) })
+	if p.cleanup {
+		p.stopLeftovers()
+	}
 	// ru_maxrss covers the root and descendants it waited for, so it catches
 	// short commands that finish between two polls.
 	if st := p.cmd.ProcessState; st != nil {
@@ -95,6 +119,29 @@ func (p *pollProcess) CurrentMB() uint64 {
 		return 0
 	default:
 		return p.current.Load()
+	}
+}
+
+// stopLeftovers stops descendants that outlived the root: SIGTERM, then
+// SIGKILL for those still there after cleanupGrace.
+func (p *pollProcess) stopLeftovers() {
+	p.mu.Lock()
+	var alive []int
+	for pid := range p.seen {
+		if pid != p.Pid() && unix.Kill(pid, 0) == nil {
+			alive = append(alive, pid)
+		}
+	}
+	p.mu.Unlock()
+	if len(alive) == 0 {
+		return
+	}
+	for _, pid := range alive {
+		_ = unix.Kill(pid, unix.SIGTERM)
+	}
+	time.Sleep(cleanupGrace)
+	for _, pid := range alive {
+		_ = unix.Kill(pid, unix.SIGKILL)
 	}
 }
 
