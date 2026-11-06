@@ -60,10 +60,17 @@ it('tells how to install loadslot when it is missing', () => {
 });
 
 it('warns in the status bar when the setup has problems', () => {
-  const item = summarize({ ...base, room: 4 }, [{ level: 'error', text: 'the hook runs a missing loadslot' }]);
+  const problem = {
+    level: 'error' as const,
+    text: 'codex: the hook runs C:/x/loadslot.exe, which does not exist',
+    title: "Codex's hook points to a missing file",
+  };
+  const item = summarize({ ...base, room: 4 }, [problem]);
   expect(item).toMatchObject({ tone: 'warning', icon: 'warning' });
-  expect(item.tooltip.split('\n')[0]).toBe('! the hook runs a missing loadslot');
-  expect(item.tooltip).toContain('Room for 4 more heavy jobs now');
+  expect(item.tooltip.split('\n')[0]).toBe("! Codex's hook points to a missing file");
+  // Every free slot fits in memory, so room repeats nothing.
+  expect(item.tooltip).not.toContain('Room for');
+  expect(summarize({ ...base, room: 1 }).tooltip).toContain('Room for 1 more heavy job now (memory)');
 });
 
 it("keeps the tooltip within Orca's 256 characters", () => {

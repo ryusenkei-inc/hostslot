@@ -3,7 +3,6 @@
 // poll, so the panel only draws it.
 import {
   atom,
-  Badge,
   Button,
   Callout,
   Collapsible,
@@ -27,6 +26,7 @@ import {
 import type { View } from './view';
 
 const current = atom<View | null>(null);
+const installLink = 'https://github.com/ryusenkei-inc/loadslot#quick-start';
 
 export function setup(ctx: PanelContext): void {
   ctx.subscriptions.push(plugin.on('view', (v: View) => set(current, v)));
@@ -37,38 +37,48 @@ export function setup(ctx: PanelContext): void {
 }
 
 function Machine({ v }: { v: View }) {
-  if (!v.memory || !v.slots) return null;
+  if (!v.machine) return null;
+  const { memory, slots } = v.machine;
   return (
     <Stack gap="sm">
-      <Progress label={v.memory.label} value={v.memory.usedPct} />
-      <Text size="sm" muted tone={v.memory.tone === 'neutral' ? undefined : v.memory.tone}>
-        {v.memory.breakdown}
-      </Text>
-      <Progress label={v.slots.label} value={v.slots.usedPct} />
+      <Progress label={memory.label} value={memory.usedPct} />
+      {memory.note ? (
+        <Text size="sm" muted tone={memory.tone === 'neutral' ? undefined : memory.tone}>
+          {memory.note}
+        </Text>
+      ) : null}
+      <Progress label={slots.label} value={slots.usedPct} />
     </Stack>
   );
 }
 
 function Running({ v }: { v: View }) {
-  if (v.running.length === 0) return <Text muted>No heavy command is running.</Text>;
+  if (!v.machine) return null;
   return (
-    <List label="Running">
-      {v.running.map((r) => (
-        <ListItem key={r.key} title={r.title} description={r.detail}>
-          <Row gap="sm" wrap>
-            <Text size="sm">{r.memory}</Text>
-            <Text size="sm" muted>
-              <RelativeTime at={r.since} format="duration" muted />
-            </Text>
-            {r.left ? (
-              <Text size="sm" tone={r.left === 'longer than usual' ? 'warning' : undefined} muted={r.left !== 'longer than usual'}>
-                {r.left}
-              </Text>
-            ) : null}
-          </Row>
-        </ListItem>
-      ))}
-    </List>
+    <Stack gap="sm">
+      <Heading level={2}>Running</Heading>
+      {v.running.length === 0 ? (
+        <Text muted>Nothing running. Heavy commands start at once.</Text>
+      ) : (
+        <List label="Running">
+          {v.running.map((r) => (
+            <ListItem key={r.key} title={r.title} description={r.detail}>
+              <Row gap="sm" wrap>
+                <Text size="sm">{r.memory}</Text>
+                <Text size="sm" muted>
+                  <RelativeTime at={r.since} format="duration" muted />
+                </Text>
+                {r.left ? (
+                  <Text size="sm" tone={r.left === 'longer than usual' ? 'warning' : undefined} muted={r.left !== 'longer than usual'}>
+                    {r.left}
+                  </Text>
+                ) : null}
+              </Row>
+            </ListItem>
+          ))}
+        </List>
+      )}
+    </Stack>
   );
 }
 
@@ -100,35 +110,21 @@ function Waiting({ v }: { v: View }) {
   );
 }
 
-function GuardStops({ v }: { v: View }) {
-  const count = v.guardStops.reduce((n, g) => n + g.rows.length + g.more, 0);
-  if (count === 0) return null;
+// A summary per guard; the stopped jobs themselves are rows of Recent.
+function Stops({ v }: { v: View }) {
+  if (v.stops.length === 0) return null;
   return (
-    <Callout tone="danger" title={`Stopped by a guard (${count})`}>
+    <Callout tone="danger" title="Stopped by a guard">
       <Stack gap="md">
-        {v.guardStops.map((g) => (
-          <Stack key={g.key} gap="sm">
+        {v.stops.map((g) => (
+          <Stack key={g.key} gap="xs">
             <Text weight="semibold">{g.title}</Text>
+            <Text size="sm">
+              {g.summary} · last <RelativeTime at={g.last} format="short" />
+            </Text>
             <Text size="sm" muted>
               {g.explanation}
             </Text>
-            <List label={g.title}>
-              {g.rows.map((r) => (
-                <ListItem key={r.key} title={r.title} description={r.where}>
-                  <Row gap="sm" wrap>
-                    <Text size="sm">peak {r.peak}</Text>
-                    <Text size="sm" muted>
-                      <RelativeTime at={r.ended} format="short" muted />
-                    </Text>
-                  </Row>
-                </ListItem>
-              ))}
-            </List>
-            {g.more > 0 ? (
-              <Text size="sm" muted>
-                and {g.more} more, listed in Recent
-              </Text>
-            ) : null}
           </Stack>
         ))}
       </Stack>
@@ -139,9 +135,7 @@ function GuardStops({ v }: { v: View }) {
 function Recent({ v }: { v: View }) {
   if (v.recent.length === 0) return null;
   return (
-    <Stack gap="sm">
-      <GuardStops v={v} />
-      <Collapsible title="Recent" description={`${v.recent.length} ended`} defaultOpen>
+    <Collapsible title="Recent" description={`${v.recent.length} ended`} defaultOpen>
       <Table
         label="Recent jobs"
         columns={[
@@ -164,8 +158,7 @@ function Recent({ v }: { v: View }) {
           },
         }))}
       />
-      </Collapsible>
-    </Stack>
+    </Collapsible>
   );
 }
 
@@ -178,97 +171,70 @@ function Repos({ v }: { v: View }) {
   );
 }
 
-// Nothing is downloaded or written until the person presses a button; the
-// text says what it downloads, from where, and where it goes.
-function Offer({ v }: { v: View }) {
-  const o = v.offer;
-  if (!o) return null;
-  const busy = Boolean(o.progress);
+// Problems in brief, then one button for what can be fixed from here. Nothing
+// is downloaded or written until it is pressed; its note says what it does.
+function Setup({ v }: { v: View }) {
+  const { problems, action, progress, result, facts, checks } = v.setup;
+  const busy = Boolean(progress);
   return (
     <Stack gap="sm">
-      {o.install ? (
-        <Stack gap="sm">
-          <Button variant="solid" tone="accent" disabled={busy} onPress={() => void plugin.request('install', {})}>
-            {o.install.update ? `Update loadslot to ${o.install.version}` : `Install loadslot ${o.install.version}`}
+      {result ? (
+        <Callout tone={result.ok ? 'success' : 'danger'} title={result.title}>
+          {result.items.length > 0 ? <KeyValue label={result.title} items={result.items} /> : null}
+          {result.text ? <Text size="sm">{result.text}</Text> : null}
+        </Callout>
+      ) : null}
+      {result?.next ? (
+        <Callout tone="warning" title="One more step">
+          <Text size="sm">{result.next}</Text>
+        </Callout>
+      ) : null}
+      {problems.length > 0 ? (
+        <Callout tone={problems.some((p) => p.tone === 'danger') ? 'danger' : 'warning'} title="Setup">
+          <List label="Setup problems">
+            {problems.map((p) => (
+              <ListItem key={p.key} title={p.title} description={p.detail} />
+            ))}
+          </List>
+        </Callout>
+      ) : null}
+      {action ? (
+        <Stack gap="xs">
+          <Button variant="solid" tone="accent" disabled={busy} onPress={() => void plugin.request(action.request, {})}>
+            {action.label}
           </Button>
           <Text size="sm" muted>
-            Downloads it from the loadslot releases on GitHub to {o.install.to}, checks its SHA-256, then runs loadslot
-            setup to register the hooks of the agents installed here.
+            {action.note}
           </Text>
         </Stack>
       ) : null}
-      {o.setup && !o.install ? (
-        <Button variant="outline" disabled={busy} onPress={() => void plugin.request('setup', {})}>
-          Run loadslot setup
-        </Button>
-      ) : null}
-      {o.progress ? (
+      {progress ? (
         <Text size="sm" muted>
-          {o.progress}
+          {progress}
         </Text>
       ) : null}
-      {o.result ? (
-        <Callout tone={o.result.ok ? 'success' : 'danger'} title={o.result.title}>
-          {o.result.items.length > 0 ? <KeyValue label={o.result.title} items={o.result.items} /> : null}
-          {o.result.text ? <Text size="sm">{o.result.text}</Text> : null}
-        </Callout>
-      ) : null}
-      {o.result?.next ? (
-        <Callout tone="warning" title="One more step">
-          <Text size="sm">{o.result.next}</Text>
-        </Callout>
+      {!v.machine ? <Link href={installLink}>Other ways to install</Link> : null}
+      {problems.length === 0 && v.machine ? (
+        <Collapsible title="Setup" description={checks > 0 ? `All ${checks} checks pass` : 'Not checked yet'}>
+          <KeyValue label="loadslot" items={facts} />
+        </Collapsible>
       ) : null}
     </Stack>
-  );
-}
-
-function Setup({ v }: { v: View }) {
-  if (v.problems.length > 0) {
-    return (
-      <Stack gap="sm">
-        {v.problems.map((p) => (
-          <Callout key={p.text} tone={p.level === 'error' ? 'danger' : 'warning'} title={p.level === 'error' ? 'Setup error' : 'Setup warning'}>
-            <Text>{p.text}</Text>
-          </Callout>
-        ))}
-      </Stack>
-    );
-  }
-  return (
-    <Collapsible title="Setup" description={v.checks > 0 ? `All ${v.checks} checks pass` : 'Not checked yet'}>
-      <KeyValue label="loadslot" items={v.facts} />
-    </Collapsible>
   );
 }
 
 export default function Panel() {
   const v = read(current);
   if (!v) return <EmptyState title="Reading loadslot status…" />;
-  if (v.problem) {
-    return (
-      <Stack gap="md">
-        <Heading>{v.headline}</Heading>
-        <Callout tone="warning" title={v.problem.title}>
-          <Text muted>{v.problem.detail}</Text>
-          <Link href={v.problem.link}>How to install loadslot</Link>
-        </Callout>
-        <Offer v={v} />
-      </Stack>
-    );
-  }
   return (
     <Stack gap="md">
-      <Row justify="between">
-        <Heading>{v.headline}</Heading>
-        <Badge tone={v.tone}>{v.slots?.label.split(' · ')[0] ?? ''}</Badge>
-      </Row>
+      <Heading>{v.headline}</Heading>
       <Machine v={v} />
-      <Heading level={2}>Running</Heading>
       <Running v={v} />
       <Waiting v={v} />
+      <Stops v={v} />
       <Recent v={v} />
       <Repos v={v} />
-      <Offer v={v} />
       <Setup v={v} />
     </Stack>
   );

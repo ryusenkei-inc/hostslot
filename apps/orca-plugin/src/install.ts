@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { Problem } from './status.ts';
 import { older } from './version.ts';
-import type { Offer } from './view.ts';
+import type { SetupAction } from './view.ts';
 
 const releases = 'https://github.com/ryusenkei-inc/loadslot/releases/download';
 const DOWNLOAD_MS = 120_000;
@@ -50,9 +50,9 @@ export function parseChecksums(text: string): Map<string, string> {
 }
 
 /**
- * What to offer: installing the plugin's own version when loadslot is
- * missing or older (and a release exists for this OS), and running setup
- * when `doctor` says it fixes a problem.
+ * The one button to offer: installing the plugin's own version when loadslot
+ * is missing or older (and a release exists for this OS), which also runs
+ * setup; otherwise setup when `doctor` says it fixes a problem.
  */
 export function offer(o: {
   found: boolean;
@@ -62,14 +62,19 @@ export function offer(o: {
   target: string;
   platform?: NodeJS.Platform;
   arch?: string;
-}): Offer {
-  const out: Offer = {};
+}): SetupAction | undefined {
   const outdated = o.found && o.binary !== '' && older(o.binary, o.plugin);
   if (o.plugin && assetName(o.plugin, o.platform, o.arch) && (!o.found || outdated)) {
-    out.install = { version: o.plugin, to: o.target, update: outdated };
+    return {
+      request: 'install',
+      label: outdated ? `Update loadslot to ${o.plugin}` : `Install loadslot ${o.plugin}`,
+      note: `Downloads it from GitHub to ${o.target}, checks it against the release's checksums, then connects your agents.`,
+    };
   }
-  if (o.found && o.problems.some((p) => p.fix === 'setup')) out.setup = true;
-  return out;
+  if (o.found && o.problems.some((p) => p.fix === 'setup')) {
+    return { request: 'setup', label: 'Fix with loadslot setup', note: 'Connects your agents and replaces an older daemon.' };
+  }
+  return undefined;
 }
 
 const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };

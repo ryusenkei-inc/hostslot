@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "include": ["src"],
-  // panel.tsx imports the `orca` module, whose types only `orca plugin types` writes (git-ignored);
-  // `orca plugin check .` renders it instead
-  "exclude": ["src/panel.tsx"]
+  // The panel and its scenarios import `orca` and `orca/testing`, whose types only `orca plugin types`
+  // writes (git-ignored); `orca plugin check .` renders them instead
+  "exclude": ["src/panel.tsx", "src/panel.check.ts"]
 }

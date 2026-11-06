@@ -30,12 +30,16 @@ const status = (over: Partial<Status> = {}, snap: Partial<Status['snapshot']> = 
   snapshot: { slots: 4, used: 0, heldMB: 0, running: [], waiting: [], ...snap },
 });
 
-it('says when the machine is idle, with memory and slots as bars', () => {
+it('says when the machine is idle, each number once', () => {
   const v = view(status(), '', [], 5, now);
-  expect(v).toMatchObject({ headline: 'Idle: heavy commands start at once', tone: 'success', checks: 5 });
-  expect(v.memory).toEqual({ usedPct: 50, label: 'Memory 50% used of 16.0 GB', breakdown: '8.0 GB free · 1.0 GB kept for apps', tone: 'neutral' });
-  expect(v.slots).toEqual({ usedPct: 0, label: '0 of 4 slots · room for 4 more' });
-  expect(v.facts).toContainEqual({ label: 'Ceiling per job', value: '12.0 GB' });
+  expect(v).toMatchObject({ headline: 'Idle', tone: 'success' });
+  expect(v.machine).toEqual({
+    memory: { usedPct: 50, label: 'Memory: 8.0 GB free of 16.0 GB', note: '1.0 GB kept for apps', tone: 'neutral' },
+    // Room adds nothing while every free slot fits in memory.
+    slots: { usedPct: 0, label: 'Slots: 0 of 4 in use' },
+  });
+  expect(v.setup).toMatchObject({ problems: [], checks: 5 });
+  expect(v.setup.facts).toContainEqual({ label: 'Memory ceiling per job', value: '12.0 GB' });
   expect(JSON.parse(JSON.stringify(v))).toEqual(v);
 });
 
@@ -44,7 +48,7 @@ it('shows what runs, how long it usually takes, and what waits and why', () => {
   const behind = { ...job, id: 9, reason: 'queue', started: undefined, source: undefined };
   const v = view(status({ room: 0 }, { used: 4, heldMB: 1536, running: [job], waiting: [waitingSlots, behind] }), '', [], 0, now);
   expect(v.headline).toBe('2 waiting for room');
-  expect(v.memory?.breakdown).toBe('8.0 GB free · 1.5 GB held for running jobs · 1.0 GB kept for apps');
+  expect(v.machine?.memory.note).toBe('1.5 GB held for running jobs · 1.0 GB kept for apps');
   expect(v.running[0]).toEqual({
     key: '7',
     title: 'pnpm test',
@@ -58,47 +62,53 @@ it('shows what runs, how long it usually takes, and what waits and why', () => {
   expect(v.waiting[1]?.eta).toBeUndefined();
 });
 
-it('says when a job runs longer than usual, and why a job waits for memory', () => {
+it('says when a job runs longer than usual, why a job waits for memory, and when memory limits room', () => {
   const slow = { ...job, started: '2026-11-06T10:00:00Z' };
-  const v = view(status({}, { used: 1, heldMB: 7000, running: [slow], waiting: [{ ...job, id: 8, reason: 'memory' }] }), '', [], 0, now);
+  const v = view(status({ room: 0 }, { used: 1, heldMB: 7000, running: [slow], waiting: [{ ...job, id: 8, reason: 'memory' }] }), '', [], 0, now);
+  expect(v.headline).toBe('1 waiting for room');
   expect(v.running[0]?.left).toBe('longer than usual');
   // 8 GB free, but 6.8 GB of it is held for the running job and 1 GB is kept for apps.
   expect(v.waiting[0]?.why).toBe('needs ~2.0 GB, 168 MB available');
+  expect(v.machine?.slots.label).toBe('Slots: 1 of 4 in use · room for 0 more');
+  const busy = view(status({ room: 3 }, { used: 1, running: [job] }), '', [], 0, now);
+  expect(busy.headline).toBe('Running 1 heavy command');
 });
 
-it('lists recent jobs, with stops by a guard called out', () => {
+it('sums up guard stops; each stopped job stays a row of Recent', () => {
   const recent = [
     { command: 'x', dir: '/dev/shop', key: 'git:/dev/shop/.git\n.\nvitest run', outcome: 'ceiling', exitCode: 77, peakMB: 12500, durationMs: 61_000, ended: '2026-11-06T10:04:00Z' },
     { command: 'y', dir: '/dev/blog', key: 'git:/dev/blog/.git\n.\npnpm lint', outcome: 'failed', exitCode: 1, peakMB: 900, durationMs: 12_000, ended: '2026-11-06T10:03:00Z' },
     { command: 'z', dir: '/dev/blog', key: 'git:/dev/blog/.git\n.\npnpm test', outcome: 'gave up', exitCode: 0, ended: '2026-11-06T10:02:00Z' },
+    { command: 'w', dir: '/dev/shop', key: 'git:/dev/shop/.git\n.\npnpm check', outcome: 'machine', exitCode: 77, peakMB: 1400, ended: '2026-11-06T10:01:00Z' },
+    { command: 'w', dir: '/dev/shop', key: 'git:/dev/shop/.git\n.\npnpm check', outcome: 'machine', exitCode: 77, peakMB: 1300, ended: '2026-11-06T10:00:30Z' },
+    { command: 'v', dir: '/dev/blog', key: 'git:/dev/blog/.git\n.\npnpm check', outcome: 'machine', exitCode: 77, peakMB: 900, ended: '2026-11-06T10:00:00Z' },
   ];
   const v = view(status({ recent }), '', [], 0, now);
   expect(v.recent.map((r) => [r.title, r.where, r.outcome, r.tone, r.peak, r.took])).toEqual([
-    ['vitest run', 'shop', 'ceiling', 'danger', '12.2 GB', '1m'],
+    ['vitest run', 'shop', 'over ceiling', 'danger', '12.2 GB', '1m'],
     ['pnpm lint', 'blog', 'failed (1)', 'warning', '900 MB', '12s'],
     ['pnpm test', 'blog', 'gave up', 'neutral', '–', '–'],
+    ['pnpm check', 'shop', 'out of memory', 'danger', '1.4 GB', '–'],
+    ['pnpm check', 'shop', 'out of memory', 'danger', '1.3 GB', '–'],
+    ['pnpm check', 'blog', 'out of memory', 'danger', '900 MB', '–'],
   ]);
-  expect(v.recent[0]?.outcomeDetail).toBe('Used more than its memory ceiling and was stopped');
   expect(v.recent[1]?.outcomeDetail).toBe('Exited with an error (exit 1)');
-  expect(v.guardStops).toEqual([
+  expect(v.stops).toEqual([
+    {
+      key: 'machine',
+      title: 'Machine nearly out of memory',
+      summary: '3 jobs · shop ×2, blog',
+      last: Date.parse('2026-11-06T10:01:00Z'),
+      explanation: 'loadslot stopped the largest job running in the background. Run it again when there is room.',
+    },
     {
       key: 'ceiling',
       title: 'Over the memory ceiling per job',
-      explanation: 'Each job may use up to 12.0 GB; these used more and were stopped.',
-      rows: [{ key: '2026-11-06T10:04:00Z#0', title: 'vitest run', where: 'shop', peak: '12.2 GB', ended: Date.parse('2026-11-06T10:04:00Z') }],
-      more: 0,
+      summary: '1 job · shop',
+      last: Date.parse('2026-11-06T10:04:00Z'),
+      explanation: 'Each job may use up to 12.0 GB; these used more.',
     },
   ]);
-  const stops = Array.from({ length: 5 }, (_, i) => ({
-    command: 'x',
-    dir: '/dev/shop',
-    key: 'git:/dev/shop/.git\n.\nvitest run',
-    outcome: 'machine',
-    exitCode: 77,
-    ended: `2026-11-06T10:0${4 - i}:00Z`,
-  }));
-  const many = view(status({ recent: stops }), '', [], 0, now).guardStops[0];
-  expect([many?.title, many?.rows.length, many?.more]).toEqual(['Machine nearly out of memory', 3, 2]);
 });
 
 it('groups jobs by repository', () => {
@@ -110,15 +120,25 @@ it('groups jobs by repository', () => {
   ]);
 });
 
-it('surfaces setup problems and nearly exhausted memory', () => {
-  const problem = { level: 'warn' as const, text: 'claude: hook not registered. Run: loadslot setup' };
-  expect(view(status(), '', [problem], 4, now)).toMatchObject({ tone: 'warning', headline: '1 setup problem', problems: [problem] });
+it('lists setup problems briefly, and says when memory is nearly gone', () => {
+  const problems = [
+    { level: 'warn' as const, text: 'daemon pid 1 v0.4.1 …: older than this loadslot', fix: 'setup' as const, title: 'An older daemon is running', detail: 'v0.4.1 (pid 1). The next heavy command replaces it.' },
+    { level: 'error' as const, text: 'codex: cannot read hooks.json' },
+  ];
+  const v = view(status(), '', problems, 4, now);
+  expect(v).toMatchObject({ tone: 'warning', headline: 'Setup needs attention' });
+  expect(v.setup.problems).toEqual([
+    { key: '0', tone: 'warning', title: 'An older daemon is running', detail: 'v0.4.1 (pid 1). The next heavy command replaces it.' },
+    { key: '1', tone: 'danger', title: 'codex: cannot read hooks.json' },
+  ]);
   const low = view(status({ memory: { totalMB: 16384, freeMB: 1000 } }, { used: 1, running: [job] }), '', [], 0, now);
   expect(low).toMatchObject({ headline: 'Memory nearly gone', tone: 'danger' });
-  expect(low.memory?.tone).toBe('danger');
+  expect(low.machine?.memory.tone).toBe('danger');
 });
 
 it('explains a missing loadslot', () => {
-  const v = view(undefined, 'loadslot: not found');
-  expect(v.problem).toEqual({ title: 'loadslot is not installed or not reachable', detail: 'loadslot: not found', link: 'https://github.com/ryusenkei-inc/loadslot#install' });
+  const v = view(undefined, '');
+  expect(v).toMatchObject({ headline: "loadslot isn't installed", tone: 'warning' });
+  expect(v.machine).toBeUndefined();
+  expect(v.setup.problems).toEqual([{ key: 'missing', tone: 'warning', title: 'loadslot not found', detail: 'Not on the PATH or in the usual places.' }]);
 });

@@ -2,8 +2,9 @@
 // --json` and posted to the panel. Pure, so it is tested without Orca.
 //
 // The panel answers, in this order: is the machine OK; what runs and when it
-// ends; what waits, why and for how long; what just happened (including jobs
-// a guard stopped); which repositories use the machine; is the setup sound.
+// ends; what waits, why and for how long; what a guard stopped; what just
+// happened; which repositories use the machine; is the setup sound. Each
+// fact appears once.
 import { origin } from './origin.ts';
 import type { Job, Problem, Status } from './status.ts';
 
@@ -51,17 +52,22 @@ export type RecentRow = {
   ended: number;
 };
 
-/** What the panel offers to fix; the worker acts only when the person presses its button. */
-export type Offer = {
-  /** Download loadslot `version` to `to` and run its setup; `update` when an older one is there. */
-  install?: { version: string; to: string; update: boolean };
-  /** Register the agents' hooks (`loadslot setup`). */
-  setup?: boolean;
-  /** What the worker is doing now. */
-  progress?: string;
-  /** How the last install or setup went. */
-  result?: ActionResult;
+/** What one guard stopped recently, summed up; each job is a row of Recent. */
+export type GuardStops = {
+  key: string;
+  title: string;
+  /** `4 jobs · api ×2, shop` */
+  summary: string;
+  /** When the latest was stopped, ms since the epoch. */
+  last: number;
+  explanation: string;
 };
+
+/** A setup problem in brief. */
+export type SetupProblem = { key: string; tone: 'warning' | 'danger'; title: string; detail?: string };
+
+/** The one button that fixes what it can; the worker acts only when it is pressed. */
+export type SetupAction = { request: 'install' | 'setup'; label: string; note: string };
 
 /** The outcome of an install or setup, item by item, and what is left to do. */
 export type ActionResult = {
@@ -74,38 +80,36 @@ export type ActionResult = {
   text?: string;
 };
 
-/** Recent jobs one guard stopped, with why in one sentence. */
-export type GuardGroup = {
-  key: string;
-  title: string;
-  explanation: string;
-  /** The newest few; the rest are only counted (they are in Recent). */
-  rows: { key: string; title: string; where: string; peak: string; ended: number }[];
-  more: number;
+/** Whether loadslot is installed and wired up. */
+export type Setup = {
+  problems: SetupProblem[];
+  action?: SetupAction;
+  /** What the worker is doing now. */
+  progress?: string;
+  result?: ActionResult;
+  /** About this machine and loadslot, when there are no problems. */
+  facts: { label: string; value: string }[];
+  /** How many checks ran (0 before the first `doctor`). */
+  checks: number;
 };
 
 /** Everything the panel draws; plain JSON, as it crosses from the worker. */
 export type View = {
   headline: string;
   tone: Tone;
-  memory?: { usedPct: number; label: string; breakdown: string; tone: Tone };
-  slots?: { usedPct: number; label: string };
-  facts: { label: string; value: string }[];
+  /** Missing while loadslot can't be read. */
+  machine?: {
+    memory: { usedPct: number; label: string; note?: string; tone: Tone };
+    slots: { usedPct: number; label: string };
+  };
   running: JobRow[];
   waiting: WaitRow[];
+  stops: GuardStops[];
   recent: RecentRow[];
-  /** Recent jobs a guard stopped, by guard, so they are not missed. */
-  guardStops: GuardGroup[];
   byRepo: { key: string; repo: string; summary: string }[];
-  problem?: { title: string; detail: string; link: string };
-  /** Warnings and errors about the setup, with what to do. */
-  problems: Problem[];
-  /** How many setup checks ran (0 before the first `doctor`). */
-  checks: number;
-  offer?: Offer;
+  setup: Setup;
 };
 
-const installLink = 'https://github.com/ryusenkei-inc/loadslot#install';
 const lowMemoryShare = 0.1;
 
 // Short, for a table column in a narrow sidebar; `outcomeDetail` explains.
@@ -113,7 +117,7 @@ const outcomes: Record<string, [label: string, tone: Tone, detail: string]> = {
   ok: ['ok', 'success', 'Finished'],
   failed: ['failed', 'warning', 'Exited with an error'],
   timeout: ['timed out', 'warning', 'Ran longer than its timeout and was stopped'],
-  ceiling: ['ceiling', 'danger', 'Used more than its memory ceiling and was stopped'],
+  ceiling: ['over ceiling', 'danger', 'Used more than its memory ceiling and was stopped'],
   machine: ['out of memory', 'danger', 'Stopped because the machine was nearly out of memory'],
   lost: ['lost', 'warning', 'The client went away without reporting'],
   'gave up': ['gave up', 'neutral', 'Left the queue before it started'],
@@ -123,32 +127,34 @@ const outcomes: Record<string, [label: string, tone: Tone, detail: string]> = {
 export function view(s: Status | undefined, reason = '', problems: Problem[] = [], checks = 0, now = Date.now()): View {
   if (!s) {
     return {
-      headline: 'loadslot not found',
+      headline: "loadslot isn't installed",
       tone: 'warning',
-      facts: [],
       running: [],
       waiting: [],
+      stops: [],
       recent: [],
-      guardStops: [],
       byRepo: [],
-      problem: { title: 'loadslot is not installed or not reachable', detail: reason, link: installLink },
-      problems: [],
-      checks,
+      setup: {
+        problems: [{ key: 'missing', tone: 'warning', title: 'loadslot not found', detail: reason || 'Not on the PATH or in the usual places.' }],
+        facts: [],
+        checks,
+      },
     };
   }
   const { slots, used, running, waiting } = s.snapshot;
   const { totalMB, freeMB } = s.memory;
   const low = freeMB < totalMB * lowMemoryShare;
+  const setupProblems = problems.map(brief);
 
   let tone: Tone = used > 0 ? 'accent' : 'success';
-  let headline = used > 0 ? `${used} of ${slots} slots in use` : 'Idle: heavy commands start at once';
+  let headline = used > 0 ? `Running ${running.length} heavy ${plural(running.length, 'command')}` : 'Idle';
+  if (setupProblems.length > 0) {
+    tone = 'warning';
+    headline = 'Setup needs attention';
+  }
   if (waiting.length > 0) {
     tone = 'warning';
     headline = `${waiting.length} waiting for room`;
-  }
-  if (problems.length > 0 && tone !== 'warning') {
-    tone = 'warning';
-    headline = `${problems.length} setup ${plural(problems.length, 'problem')}`;
   }
   if (low) {
     tone = 'danger';
@@ -156,11 +162,13 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
   }
 
   const usedPct = pct(totalMB - freeMB, totalMB);
-  const breakdown = [
-    `${size(freeMB)} free`,
+  const note = [
     ...(s.snapshot.heldMB ? [`${size(s.snapshot.heldMB)} held for running jobs`] : []),
     ...(s.reserveMB ? [`${size(s.reserveMB)} kept for apps`] : []),
   ].join(' · ');
+  // Room says more than the free slots only when memory is what limits it.
+  const free = slots - used;
+  const room = s.room !== undefined && s.room < free ? ` · room for ${s.room} more` : '';
 
   // Typical time left of each running job, soonest first: the waiting jobs
   // start roughly as these end.
@@ -170,21 +178,15 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
   return {
     headline,
     tone,
-    memory: {
-      usedPct,
-      label: `Memory ${usedPct}% used of ${size(totalMB)}`,
-      breakdown,
-      tone: low ? 'danger' : usedPct > 80 ? 'warning' : 'neutral',
+    machine: {
+      memory: {
+        usedPct,
+        label: `Memory: ${size(freeMB)} free of ${size(totalMB)}`,
+        ...(note ? { note } : {}),
+        tone: low ? 'danger' : usedPct > 80 ? 'warning' : 'neutral',
+      },
+      slots: { usedPct: pct(used, slots), label: `Slots: ${used} of ${slots} in use${room}` },
     },
-    slots: {
-      usedPct: pct(used, slots),
-      label: `${used} of ${slots} slots${s.room !== undefined ? ` · room for ${s.room} more` : ''}`,
-    },
-    facts: [
-      { label: 'CPUs', value: String(s.cpus) },
-      ...(s.ceilingMB ? [{ label: 'Ceiling per job', value: size(s.ceilingMB) }] : []),
-      { label: 'loadslot', value: `${s.version ?? 'unknown version'}${s.mode === 'daemon' ? '' : ` (${s.mode})`}` },
-    ],
     running: running.map((j) => {
       const left = remaining(j, now);
       return {
@@ -208,6 +210,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
         ...(eta === undefined ? {} : { eta: `~${duration(eta)}` }),
       };
     }),
+    stops: guardStops(s, now),
     recent: (s.recent ?? []).map((f, i) => {
       const [label, oTone, detail] = outcomes[f.outcome] ?? [f.outcome, 'neutral', f.outcome];
       return {
@@ -222,14 +225,25 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
         ended: time(f.ended, now),
       };
     }),
-    guardStops: guardStops(s, now),
     byRepo: byRepo([...running, ...waiting]),
-    problems,
-    checks,
+    setup: {
+      problems: setupProblems,
+      facts: [
+        { label: 'loadslot', value: `${s.version ?? 'unknown version'}${s.mode === 'daemon' ? '' : ` (${s.mode})`}` },
+        { label: 'CPUs', value: String(s.cpus) },
+        ...(s.ceilingMB ? [{ label: 'Memory ceiling per job', value: size(s.ceilingMB) }] : []),
+      ],
+      checks,
+    },
   };
 }
 
-const guardRows = 3;
+// An older loadslot's doctor checks have only their full line.
+function brief(p: Problem, i: number): SetupProblem {
+  const tone = p.level === 'error' ? 'danger' : 'warning';
+  if (!p.title) return { key: `${i}`, tone, title: p.text };
+  return { key: `${i}`, tone, title: p.title, ...(p.detail ? { detail: p.detail } : {}) };
+}
 
 const guards: { outcome: string; title: string; explanation: (s: Status) => string }[] = [
   {
@@ -240,26 +254,31 @@ const guards: { outcome: string; title: string; explanation: (s: Status) => stri
   {
     outcome: 'ceiling',
     title: 'Over the memory ceiling per job',
-    explanation: (s) =>
-      `Each job may use up to ${s.ceilingMB ? size(s.ceilingMB) : 'its ceiling'}; these used more and were stopped.`,
+    explanation: (s) => `Each job may use up to ${s.ceilingMB ? size(s.ceilingMB) : 'its ceiling'}; these used more.`,
   },
 ];
 
-function guardStops(s: Status, now: number): GuardGroup[] {
+function guardStops(s: Status, now: number): GuardStops[] {
   const recent = s.recent ?? [];
   return guards.flatMap((g) => {
-    const rows = recent
-      .map((f, i) => ({ f, i }))
-      .filter(({ f }) => f.outcome === g.outcome)
-      .map(({ f, i }) => ({
-        key: `${f.ended}#${i}`,
-        title: title(f),
-        where: origin(f),
-        peak: f.peakMB ? size(f.peakMB) : '–',
-        ended: time(f.ended, now),
-      }));
-    if (rows.length === 0) return [];
-    return [{ key: g.outcome, title: g.title, explanation: g.explanation(s), rows: rows.slice(0, guardRows), more: Math.max(0, rows.length - guardRows) }];
+    const stopped = recent.filter((f) => f.outcome === g.outcome);
+    const latest = stopped[0];
+    if (!latest) return [];
+    const repos = new Map<string, number>();
+    for (const f of stopped) {
+      const repo = origin(f) || 'other';
+      repos.set(repo, (repos.get(repo) ?? 0) + 1);
+    }
+    const where = [...repos].map(([repo, n]) => (n > 1 ? `${repo} ×${n}` : repo)).join(', ');
+    return [
+      {
+        key: g.outcome,
+        title: g.title,
+        summary: `${stopped.length} ${plural(stopped.length, 'job')} · ${where}`,
+        last: time(latest.ended, now),
+        explanation: g.explanation(s),
+      },
+    ];
   });
 }
 

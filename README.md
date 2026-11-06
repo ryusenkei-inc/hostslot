@@ -109,6 +109,8 @@ Each finished job adds a sample to `samples.json` in the data directory. Nothing
 
 This repository is also an Orca plugin (`orca-plugin.json` at the root, code in `apps/orca-plugin`).
 
+<img src="docs/images/orca-panel.png" alt="The loadslot panel in Orca: memory and slots, running and waiting jobs, a guard stop, recent jobs" width="360">
+
 - **Status bar:** `loadslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
 - **Panel** (press the item to open the right sidebar, then pick the loadslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; recent outcomes, with guard stops called out; jobs by repository; setup checks
 - **Install from the panel:** when loadslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in loadslot's data directory and runs `loadslot setup`. When a hook is missing, it offers `loadslot setup` alone. Nothing is downloaded or written before a press
@@ -235,7 +237,7 @@ Data directory: `~/.local/share/loadslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 
 ### Upgrading from jobgate
 
-loadslot was called `jobgate` until v0.2.0. `loadslot setup` replaces a hook registered under the old name; the first run carries over `samples.json` and `config.json`; `JOBGATE_*` variables are now `LOADSLOT_*`.
+loadslot was called `jobgate` until v0.2.0. `loadslot setup` replaces a hook registered under the old name; the first run carries over `samples.json` and `config.json`; `JOBGATE_*` variables are now `LOADSLOT_*`. Delete any `jobgate` executable: scripts that fall back to it start an old daemon, and `loadslot doctor` warns while one is on the `PATH`.
 
 ## Development
 

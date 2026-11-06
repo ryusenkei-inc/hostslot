@@ -29,15 +29,18 @@ it('reads checksums.txt', () => {
   expect(sums.size).toBe(2);
 });
 
-it('offers to install when loadslot is missing or older, and setup when doctor says so', () => {
+it('offers one button: install when loadslot is missing or older, else setup when doctor says so', () => {
   const base = { binary: '', plugin: '0.5.0', problems: [], target: '/t', platform: 'linux' as const, arch: 'x64' };
-  expect(offer({ ...base, found: false })).toEqual({ install: { version: '0.5.0', to: '/t', update: false } });
-  expect(offer({ ...base, found: true, binary: '0.4.0' })).toEqual({ install: { version: '0.5.0', to: '/t', update: true } });
-  expect(offer({ ...base, found: true, binary: '0.5.0' })).toEqual({});
-  expect(offer({ ...base, found: false, platform: 'freebsd' })).toEqual({});
-  expect(offer({ ...base, found: false, plugin: '' })).toEqual({});
+  expect(offer({ ...base, found: false })).toMatchObject({ request: 'install', label: 'Install loadslot 0.5.0' });
+  expect(offer({ ...base, found: true, binary: '0.4.0' })).toMatchObject({ request: 'install', label: 'Update loadslot to 0.5.0' });
+  expect(offer({ ...base, found: false })?.note).toContain('/t');
+  expect(offer({ ...base, found: true, binary: '0.5.0' })).toBeUndefined();
+  expect(offer({ ...base, found: false, platform: 'freebsd' })).toBeUndefined();
+  expect(offer({ ...base, found: false, plugin: '' })).toBeUndefined();
   const problems = [{ level: 'warn' as const, text: 'claude: hook not registered', fix: 'setup' as const }];
-  expect(offer({ ...base, found: true, binary: '0.5.0', problems })).toEqual({ setup: true });
+  expect(offer({ ...base, found: true, binary: '0.5.0', problems })).toMatchObject({ request: 'setup' });
+  // Installing runs setup too, so one button covers both.
+  expect(offer({ ...base, found: true, binary: '0.4.0', problems })).toMatchObject({ request: 'install' });
 });
 
 it('turns setup --json into items, with the Codex trust step', () => {
