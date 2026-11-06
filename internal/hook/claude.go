@@ -41,6 +41,7 @@ type ClaudeOptions struct {
 type claudeInput struct {
 	ToolName  string         `json:"tool_name"`
 	ToolInput map[string]any `json:"tool_input"`
+	Cwd       string         `json:"cwd"`
 }
 
 // Claude reads a Claude Code PreToolUse event from in and, when it is a
@@ -56,7 +57,7 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 		return nil
 	}
 	command, _ := ev.ToolInput["command"].(string)
-	heavy := Heavy(command, o.Heavy)
+	heavy := HeavyIn(command, ev.Cwd, o.Heavy)
 	if len(heavy) == 0 {
 		return nil
 	}
@@ -89,6 +90,12 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 // runs loadslot itself, sets LOADSLOT_DISABLE=1 or does not parse has no heavy
 // commands: the hook then leaves it alone rather than guess.
 func Heavy(line string, heavy *regexp.Regexp) []string {
+	return heavyCommands(line, heavy, nil, 0)
+}
+
+// heavyCommands is Heavy with package scripts to follow: a script call is
+// heavy when its script is, up to maxScriptHops deep.
+func heavyCommands(line string, heavy *regexp.Regexp, scripts packageScripts, hops int) []string {
 	if heavy == nil {
 		heavy = DefaultHeavy
 	}
@@ -107,8 +114,15 @@ func Heavy(line string, heavy *regexp.Regexp) []string {
 		if words[0] == "loadslot" {
 			return nil
 		}
-		if c := strings.Join(words, " "); heavy.MatchString(c) {
+		c := strings.Join(words, " ")
+		if heavy.MatchString(c) {
 			found = append(found, c)
+			continue
+		}
+		if name, ok := scriptCall(words); ok && hops < maxScriptHops {
+			if body, ok := scripts[name]; ok && len(heavyCommands(body, heavy, scripts, hops+1)) > 0 {
+				found = append(found, c)
+			}
 		}
 	}
 	return found
