@@ -9,8 +9,8 @@
   "scripts": {
     "lint": "pnpm typecheck && prose-lint && ryusenkei-conventions check && go vet ./...",
     "lint:prose": "prose-lint",
-    "typecheck": "tsc",
-    "test": "go test ./...",
+    "typecheck": "pnpm -r --if-present typecheck && tsc",
+    "test": "go test ./... && vitest run --passWithNoTests",
     "check": "pnpm lint && pnpm test",
     "env:push": "node scripts/env.ts push",
     "repo:settings": "node scripts/repo.ts",
@@ -22,6 +22,7 @@
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^26.6.1",
     "cross-spawn": "^7.0.6",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0"
   }
 }

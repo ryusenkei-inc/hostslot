@@ -1,16 +1,21 @@
 # CLAUDE.md
 
-jobgate（重いジョブの実行をマシン全体で調整する Go の CLI）。構成・コマンドは [README.md](README.md)
+jobgate（重いジョブの実行をマシン全体で調整する CLI と、その Orca のプラグイン）。構成・コマンドは [README.md](README.md)
 
 ## このリポの規約
 
 - 公開の OSS（MIT）: 社内の事情・個人名・秘密値を書かない
 - 英語: README・issue・PR のタイトルと本文・コミットメッセージ・コードのコメント（共通の規約の「日本語」より優先）
   - prose-lint の `commit/subject-ja`: `prose-lint.json` で無効化
-- 本体: Go のモジュール。Node.js は開発の道具だけ（prose-lint・共通の規約・`scripts/`）
-- テスト: Go の `testing`、対象と同じディレクトリに `*_test.go`（共通規約の Vitest の代わり）
+- 構成: ルートに CLI の Go のモジュール、`apps/*` に TypeScript のパッケージ（pnpm のワークスペース）
+  - Go のモジュールはルートから移動しない（`go install …/cmd/jobgate@latest` と `v*` のタグを維持）
+- `apps/orca-plugin`: 実行時の依存なし（Orca が TypeScript をそのまま読み込む）
+  - パスは固定: 移動すると Orca の上で別のリポの扱い
+- テスト: 対象と同じディレクトリ
+  - Go: `testing` の `*_test.go`
+  - TypeScript: Vitest の `*.test.ts`
 - OS ごとの実装: `internal/platform` のビルドタグのファイルだけ。`internal/gate` は OS に依存しない
-- 完了の条件: `go vet` を含む `pnpm lint` と、`go test ./...` を実行する `pnpm test` が通過
+- 完了の条件: `go vet` を含む `pnpm lint` と、`go test ./...`・Vitest を実行する `pnpm test` が通過
 - 共通の規約: 下の import（`pnpm install` の実行後に有効）
 
 @node_modules/@ryusenkei/conventions/rules.md
