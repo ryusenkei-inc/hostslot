@@ -14,6 +14,22 @@ Running several coding agents in parallel (each in its own worktree, often acros
 
 loadslot does, across tools and repositories. It works the same from a plain terminal, any editor, Claude Code hooks, git hooks and package scripts.
 
+## loadslot and Orca
+
+[Orca](https://github.com/stablyai/orca) runs agents side by side in worktrees and has its own resource features. loadslot doesn't replace them; it covers what happens inside the agents' terminals. As of Orca 1.4.25x:
+
+| Need | Orca | loadslot |
+| --- | --- | --- |
+| See memory and CPU use | Resource Manager: per-session CPU and memory, host free memory, kill a session by hand | Machine and per-job memory, held memory, why jobs wait, recent outcomes (its plugin's panel) |
+| Limit how many agents start | Orchestration dispatches at most 4 tasks by default; spawning of restores and automations pauses when the number of processes grows fast (not memory) | An advisory "room" for more work; agents themselves are not gated |
+| Stop heavy commands from running at the same time | Not covered: every agent's `pnpm test`, `tsc` or `cargo build` starts at once | Admits each heavy command when slots and memory allow; the rest wait in a queue with priorities |
+| Know what a command will cost | Not covered | Learns each command's peak memory and duration per repository, shared across worktrees |
+| Share CPU fairly | Not covered | Lower OS priority for agent jobs; inner parallelism (`VITEST_MAX_WORKERS`, pnpm concurrency) set to each job's share |
+| Stop a runaway | Not covered (on Linux, one OOM kill no longer takes every terminal with it) | Per-job memory ceiling; the largest background job is stopped when memory is nearly gone; leftover processes are cleaned up |
+| Coordinate beyond Orca | Orca's own terminals | Machine-wide: Orca, other editors and terminals, Claude Code and Codex hooks, git hooks, package scripts |
+
+In short: Orca shows and paces agents; loadslot schedules the heavy work the agents start, across everything on the machine, and guards memory while it runs.
+
 ## How it works
 
 - **Slots:** `floor((total memory x 0.6 - reserve) / cost of a weight-1 job)`, capped by the CPU count and at least 1. With the defaults (1 GB reserve, 2 GB per weight-1 job), a 16 GB machine has 4 slots.
