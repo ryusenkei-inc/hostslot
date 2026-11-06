@@ -125,10 +125,8 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	env := append(withWorkers(os.Environ(), workers), JobVar+"=1")
 	start := time.Now()
 	res, err := execute(p, o, env, watch{report: l.report, ceilingMB: ceiling(p, cfg, o), stop: l.stopped})
-	sample := &store.Sample{PeakMB: res.peakMB, DurationMS: time.Since(start).Milliseconds(), ExitCode: res.code, At: time.Now()}
-	// A run stopped by its timeout says little about its cost; one stopped by
-	// the ceiling is kept, since its peak shows it needs at least that much.
-	if err != nil || res.timedOut {
+	sample := &store.Sample{PeakMB: res.peakMB, DurationMS: time.Since(start).Milliseconds(), ExitCode: res.code, At: time.Now(), Outcome: res.outcome()}
+	if err != nil {
 		sample = nil
 	}
 	l.release(sample)
@@ -200,6 +198,22 @@ type result struct {
 	overMemory bool
 	// machineOut: stopped because the machine was nearly out of memory.
 	machineOut bool
+}
+
+// outcome names how the run ended, for status and learning.
+func (r result) outcome() string {
+	switch {
+	case r.machineOut:
+		return "machine"
+	case r.overMemory:
+		return "ceiling"
+	case r.timedOut:
+		return "timeout"
+	case r.code == 0:
+		return "ok"
+	default:
+		return "failed"
+	}
 }
 
 // ceiling is the job's memory ceiling: --max-memory, or the configured share

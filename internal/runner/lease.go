@@ -143,7 +143,7 @@ func releaseAll(held []func()) {
 
 func lockLease(p *platform.Platform, st *store.Store, job gate.Job, slots, cpus int, held []func()) *lease {
 	return &lease{job: job, slots: slots, cpus: cpus, mode: "lock", release: func(s *store.Sample) {
-		if s != nil && s.PeakMB > 0 {
+		if s != nil && s.Learnable() {
 			recordWithLock(p.Locks, st, job.Key(), *s)
 		}
 		releaseAll(held)

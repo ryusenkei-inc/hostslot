@@ -24,7 +24,15 @@ type Sample struct {
 	DurationMS int64     `json:"durationMs"`
 	ExitCode   int       `json:"exitCode"`
 	At         time.Time `json:"at"`
+	// Outcome is how the run ended: ok, failed, timeout, ceiling (over its
+	// memory ceiling) or machine (stopped because memory ran out).
+	Outcome string `json:"outcome,omitempty"`
 }
+
+// Learnable reports whether a finished run tells the job's cost. A run
+// stopped by its timeout says little; one stopped for memory is kept, since
+// its peak shows it needs at least that much.
+func (x Sample) Learnable() bool { return x.PeakMB > 0 && x.Outcome != "timeout" }
 
 // Store reads and writes samples.json. Methods are safe for concurrent use
 // within one process; across processes the caller serializes writes (the
@@ -62,6 +70,19 @@ func (s *Store) Peaks(key string) []uint64 {
 	var out []uint64
 	for _, x := range s.data[key] {
 		out = append(out, x.PeakMB)
+	}
+	return out
+}
+
+// Durations returns how long a key's recent runs took, in milliseconds.
+func (s *Store) Durations(key string) []int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []int64
+	for _, x := range s.data[key] {
+		if x.DurationMS > 0 {
+			out = append(out, x.DurationMS)
+		}
 	}
 	return out
 }

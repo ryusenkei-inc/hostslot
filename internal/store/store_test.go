@@ -78,3 +78,15 @@ func TestPriorFromSimilarWork(t *testing.T) {
 		t.Errorf("own key counted: %d", got)
 	}
 }
+
+func TestDurationsAndLearnable(t *testing.T) {
+	st := Open(filepath.Join(t.TempDir(), FileName))
+	_ = st.Record("k", Sample{PeakMB: 100, DurationMS: 2000})
+	_ = st.Record("k", Sample{PeakMB: 100})
+	if d := st.Durations("k"); len(d) != 1 || d[0] != 2000 {
+		t.Fatalf("durations: %v", d)
+	}
+	if (Sample{PeakMB: 100, Outcome: "timeout"}).Learnable() || !(Sample{PeakMB: 100, Outcome: "ceiling"}).Learnable() || (Sample{Outcome: "ok"}).Learnable() {
+		t.Fatal("learnable rules")
+	}
+}

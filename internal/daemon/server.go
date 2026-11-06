@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -46,6 +47,8 @@ type Server struct {
 	stops      map[uint64]chan struct{}
 	lastStop   time.Time
 	reserve    uint64
+	cfg        gate.Config
+	recent     []Finished
 	clients    int
 	lastActive time.Time
 	memory     platform.Memory
@@ -101,6 +104,7 @@ func (s *Server) Serve(l net.Listener) error {
 	s.grants = map[uint64]chan struct{}{}
 	s.stops = map[uint64]chan struct{}{}
 	s.reserve = cfg.Normalize().ReserveMB
+	s.cfg = cfg
 	s.lastActive = time.Now()
 
 	stop := make(chan struct{})
@@ -165,6 +169,7 @@ func (s *Server) cycleLocked(full bool) {
 		if cfg, err := s.LoadConfig(); err == nil {
 			s.sched.SetSlots(gate.Slots(s.memory.TotalMB, s.Metrics.CPUs(), cfg))
 			s.reserve = cfg.Normalize().ReserveMB
+			s.cfg = cfg
 		}
 		s.stopLargestLocked()
 		if s.Alive != nil {
@@ -178,6 +183,16 @@ func (s *Server) cycleLocked(full bool) {
 			close(ch)
 			delete(s.grants, j.ID)
 		}
+	}
+}
+
+// recentKeep is how many ended jobs status lists.
+const recentKeep = 20
+
+func (s *Server) recordLocked(f Finished) {
+	s.recent = append([]Finished{f}, s.recent...)
+	if len(s.recent) > recentKeep {
+		s.recent = s.recent[:recentKeep]
 	}
 }
 
@@ -212,14 +227,17 @@ func (s *Server) status() *Status {
 		mode = "daemon (retiring)"
 	}
 	return &Status{
-		Mode:     mode,
-		PID:      os.Getpid(),
-		Version:  s.Version,
-		Memory:   s.memory,
-		CPUs:     s.Metrics.CPUs(),
-		Tracker:  s.Tracker,
-		Snapshot: s.sched.Snapshot(),
-		Room:     s.sched.Room(time.Now(), s.memory.FreeMB),
+		Mode:      mode,
+		PID:       os.Getpid(),
+		Version:   s.Version,
+		Memory:    s.memory,
+		CPUs:      s.Metrics.CPUs(),
+		Tracker:   s.Tracker,
+		Snapshot:  s.sched.SnapshotAt(time.Now(), s.memory.FreeMB),
+		Room:      s.sched.Room(time.Now(), s.memory.FreeMB),
+		ReserveMB: s.cfg.Normalize().ReserveMB,
+		CeilingMB: gate.Ceiling(s.memory.TotalMB, s.cfg),
+		Recent:    slices.Clone(s.recent),
 	}
 }
 
@@ -299,12 +317,29 @@ func (s *Server) serveJob(r *bufio.Reader, enc *json.Encoder, req gate.Request) 
 
 	done := func(sample *store.Sample) {
 		s.mu.Lock()
+		started := !job.Started.IsZero()
+		f := Finished{Command: req.Command, Dir: req.Dir, Key: req.Key(), Source: req.Source, Ended: time.Now()}
+		switch {
+		case sample != nil:
+			f.PeakMB, f.DurationMS, f.ExitCode, f.Outcome = sample.PeakMB, sample.DurationMS, sample.ExitCode, sample.Outcome
+			if f.Outcome == "" {
+				f.Outcome = "ok"
+				if sample.ExitCode != 0 {
+					f.Outcome = "failed"
+				}
+			}
+		case started:
+			f.Outcome = "lost"
+		default:
+			f.Outcome = "gave up"
+		}
+		s.recordLocked(f)
 		s.sched.Remove(job.ID)
 		delete(s.grants, job.ID)
 		delete(s.stops, job.ID)
 		s.cycleLocked(false)
 		s.mu.Unlock()
-		if sample != nil && sample.PeakMB > 0 && s.Store != nil {
+		if sample != nil && sample.Learnable() && s.Store != nil {
 			_ = s.Store.Record(req.Key(), *sample)
 		}
 	}

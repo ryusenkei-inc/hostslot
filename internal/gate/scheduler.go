@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"slices"
 	"sort"
 	"time"
 )
@@ -72,6 +73,22 @@ type Job struct {
 	// false until it reports (clients before this field never do).
 	CurrentMB uint64 `json:"currentMB,omitempty"`
 	Reported  bool   `json:"reported,omitempty"`
+	// ExpectedMS is the median duration of the job's recent runs (0 when
+	// unknown), for estimates of when it ends.
+	ExpectedMS int64 `json:"expectedMs,omitempty"`
+	// HeldMB is the memory admission holds back for a running job beyond the
+	// free-memory reading (see Scheduler.reserve); set by SnapshotAt.
+	HeldMB uint64 `json:"heldMB,omitempty"`
+	// Reason says why a waiting job waits: "slots" (not enough free slots),
+	// "memory" (not enough free memory), or "queue" (behind another waiting
+	// job); set by SnapshotAt.
+	Reason string `json:"reason,omitempty"`
+}
+
+// DurationEstimator is an Estimator that also knows how long a key's recent
+// runs took.
+type DurationEstimator interface {
+	Durations(key string) []int64
 }
 
 // Estimator returns the recent peaks recorded for a key, and a prior from
@@ -83,10 +100,12 @@ type Estimator interface {
 
 // Snapshot is a copy of the scheduler state for status output.
 type Snapshot struct {
-	Slots   int   `json:"slots"`
-	Used    int   `json:"used"`
-	Running []Job `json:"running"`
-	Waiting []Job `json:"waiting"`
+	Slots int `json:"slots"`
+	Used  int `json:"used"`
+	// HeldMB is the memory held back for running jobs (see Job.HeldMB).
+	HeldMB  uint64 `json:"heldMB"`
+	Running []Job  `json:"running"`
+	Waiting []Job  `json:"waiting"`
 }
 
 // Scheduler admits jobs into a fixed number of slots. It is not safe for
@@ -119,6 +138,9 @@ func (s *Scheduler) Enqueue(r Request, now time.Time) *Job {
 	}
 	est, w := Estimate(peaks, prior, r.Weight, s.slots, s.cfg)
 	j := &Job{Request: r, ID: s.seq, EstimateMB: est, Slots: w, Samples: len(peaks), Queued: now}
+	if d, ok := s.est.(DurationEstimator); ok {
+		j.ExpectedMS = median(d.Durations(r.Key()))
+	}
 	s.waiting = append(s.waiting, j)
 	// Stable sort keeps FIFO order within a priority.
 	sort.SliceStable(s.waiting, func(a, b int) bool { return s.waiting[a].Priority > s.waiting[b].Priority })
@@ -272,6 +294,37 @@ func (s *Scheduler) Snapshot() Snapshot {
 		snap.Waiting = append(snap.Waiting, *j)
 	}
 	return snap
+}
+
+// SnapshotAt is Snapshot with what admission sees at now with freeMB: the
+// memory held back for each running job, and why each waiting job waits.
+func (s *Scheduler) SnapshotAt(now time.Time, freeMB uint64) Snapshot {
+	snap := s.Snapshot()
+	for i := range snap.Running {
+		snap.Running[i].HeldMB = s.reserve(s.running[snap.Running[i].ID], now)
+		snap.HeldMB += snap.Running[i].HeldMB
+	}
+	for i := range snap.Waiting {
+		j := &snap.Waiting[i]
+		switch {
+		case i > 0:
+			j.Reason = "queue"
+		case snap.Used+j.Slots > snap.Slots:
+			j.Reason = "slots"
+		default:
+			j.Reason = "memory"
+		}
+	}
+	return snap
+}
+
+func median(values []int64) int64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := slices.Clone(values)
+	slices.Sort(sorted)
+	return sorted[len(sorted)/2]
 }
 
 func (s *Scheduler) used() int {

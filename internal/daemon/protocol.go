@@ -7,6 +7,8 @@
 package daemon
 
 import (
+	"time"
+
 	"github.com/ryusenkei-inc/loadslot/internal/gate"
 	"github.com/ryusenkei-inc/loadslot/internal/platform"
 	"github.com/ryusenkei-inc/loadslot/internal/store"
@@ -51,6 +53,22 @@ type Message struct {
 	Error    string    `json:"error,omitempty"`
 }
 
+// Finished is a job that ended, for `status`'s recent list.
+type Finished struct {
+	Command    string `json:"command"`
+	Dir        string `json:"dir"`
+	Key        string `json:"key,omitempty"`
+	Source     string `json:"source,omitempty"`
+	PeakMB     uint64 `json:"peakMB,omitempty"`
+	DurationMS int64  `json:"durationMs,omitempty"`
+	ExitCode   int    `json:"exitCode"`
+	// Outcome: ok, failed, timeout, ceiling, machine (as store.Sample), lost
+	// (the client went away without reporting), or gave up (it left the queue
+	// before it started).
+	Outcome string    `json:"outcome"`
+	Ended   time.Time `json:"ended"`
+}
+
 // Status describes the gate for `loadslot status`.
 type Status struct {
 	Mode     string                `json:"mode"`
@@ -63,4 +81,10 @@ type Status struct {
 	// Room is how many more weight-1 jobs would start now (see
 	// gate.Scheduler.Room); without a daemon, the free slots.
 	Room int `json:"room"`
+	// ReserveMB is kept free for everything else; CeilingMB is the memory one
+	// job may use (0: off).
+	ReserveMB uint64 `json:"reserveMB,omitempty"`
+	CeilingMB uint64 `json:"ceilingMB,omitempty"`
+	// Recent are the jobs that ended last, newest first.
+	Recent []Finished `json:"recent,omitempty"`
 }
