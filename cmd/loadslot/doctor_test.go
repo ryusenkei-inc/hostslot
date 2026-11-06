@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,19 +20,19 @@ func TestHookCheck(t *testing.T) {
 	}
 	settings := filepath.Join(dir, "settings.json")
 
-	if c, ok := hookCheck(setup.Claude, exe); !ok || c.level != "warn" || !strings.Contains(c.text, "not registered") {
+	if c, ok := hookCheck(setup.Claude, exe); !ok || c.Level != "warn" || !strings.Contains(c.Text, "not registered") {
 		t.Fatalf("unregistered: %+v %v", c, ok)
 	}
 	if _, err := setup.Register(settings, setup.Claude, setup.HookCommand(filepath.Join(dir, "gone", "loadslot"), setup.Claude), false, false); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := hookCheck(setup.Claude, exe); c.level != "error" || !strings.Contains(c.text, "does not exist") {
+	if c, _ := hookCheck(setup.Claude, exe); c.Level != "error" || !strings.Contains(c.Text, "does not exist") {
 		t.Fatalf("missing executable: %+v", c)
 	}
 	if _, err := setup.Register(settings, setup.Claude, setup.HookCommand(exe, setup.Claude), false, false); err != nil {
 		t.Fatal(err)
 	}
-	if c, _ := hookCheck(setup.Claude, exe); c.level != "ok" {
+	if c, _ := hookCheck(setup.Claude, exe); c.Level != "ok" {
 		t.Fatalf("registered: %+v", c)
 	}
 }
@@ -46,5 +47,12 @@ func TestPrintChecksExitCode(t *testing.T) {
 	}
 	if !strings.Contains(b.String(), "warn   b") {
 		t.Fatalf("output: %q", b.String())
+	}
+}
+
+func TestChecksMarshalForIntegrations(t *testing.T) {
+	b, err := json.Marshal([]check{{"warn", "x"}})
+	if err != nil || string(b) != `[{"level":"warn","text":"x"}]` {
+		t.Fatalf("%s %v", b, err)
 	}
 }

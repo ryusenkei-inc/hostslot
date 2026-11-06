@@ -183,6 +183,7 @@ func (s *Server) status() *Status {
 		CPUs:     s.Metrics.CPUs(),
 		Tracker:  s.Tracker,
 		Snapshot: s.sched.Snapshot(),
+		Room:     s.sched.Room(time.Now(), s.memory.FreeMB),
 	}
 }
 
