@@ -210,6 +210,7 @@ func cmdDaemon(args []string) int {
 		Store:       store.Open(filepath.Join(p.Paths.Data, store.FileName)),
 		LoadConfig:  func() (gate.Config, error) { return config.Load(p.Paths.Data) },
 		IdleTimeout: *idle,
+		Version:     daemon.Version(),
 	}
 	err = daemon.Run(p, srv)
 	if errors.Is(err, daemon.ErrRunning) {
@@ -286,6 +287,9 @@ func printStatus(w io.Writer, s *daemon.Status) {
 	mode := s.Mode
 	if s.PID > 0 {
 		mode += " pid " + strconv.Itoa(s.PID)
+	}
+	if s.Version != "" {
+		mode += " " + s.Version
 	}
 	fmt.Fprintf(w, "mode:    %s\n", mode)
 	fmt.Fprintf(w, "slots:   %d/%d used\n", s.Snapshot.Used, s.Snapshot.Slots)

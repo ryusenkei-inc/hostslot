@@ -17,6 +17,8 @@ const (
 	OpAcquire = "acquire"
 	OpRelease = "release"
 	OpStatus  = "status"
+	// OpRetire asks an older daemon to make way (see RetireOlder).
+	OpRetire = "retire"
 )
 
 // Server message types.
@@ -25,6 +27,8 @@ const (
 	TypeGrant  = "grant"
 	TypeStatus = "status"
 	TypeError  = "error"
+	// TypeRetired confirms OpRetire.
+	TypeRetired = "retired"
 )
 
 // Message is the single envelope for both directions.
@@ -45,6 +49,7 @@ type Message struct {
 type Status struct {
 	Mode     string                `json:"mode"`
 	PID      int                   `json:"pid,omitempty"`
+	Version  string                `json:"version,omitempty"`
 	Memory   platform.Memory       `json:"memory"`
 	CPUs     int                   `json:"cpus"`
 	Tracker  platform.Capabilities `json:"tracker"`

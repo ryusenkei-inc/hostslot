@@ -8,3 +8,5 @@ require (
 )
 
 require mvdan.cc/sh/v3 v3.14.1
+
+require golang.org/x/mod v0.42.0
