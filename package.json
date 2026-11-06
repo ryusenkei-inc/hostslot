@@ -19,7 +19,7 @@
     "@ryusenkei/conventions": "^0.3.0",
     "@ryusenkei/prose-lint": "^0.1.0",
     "@types/cross-spawn": "^6.0.6",
-    "@types/node": "^26.6.1",
+    "@types/node": "^26.6.6",
     "cross-spawn": "^7.0.6",
     "typescript": "^5.9.3"
   }
