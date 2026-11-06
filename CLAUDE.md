@@ -5,6 +5,7 @@ loadslot（重いジョブの実行をマシン全体で調整する CLI と、�
 ## このリポの規約
 
 - 公開の OSS（MIT）: 社内の事情・個人名・秘密値を書かない
+- 外部への発信（Orca のリポへの issue・PR・コメント、Discussions、プラグインの一覧への掲載）: 実行しない。`#44` に下書きを置き、項目ごとの明示的な承認の後に限り実行
 - 英語: README・issue・PR のタイトルと本文・コミットメッセージ・コードのコメント（共通の規約の「日本語」より優先）
   - prose-lint の `commit/subject-ja`: `prose-lint.json` で無効化
 - 構成: ルートに CLI の Go のモジュール、`apps/*` に TypeScript のパッケージ（pnpm のワークスペース）
