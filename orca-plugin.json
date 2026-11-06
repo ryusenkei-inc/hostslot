@@ -7,13 +7,36 @@
   "version": "0.4.0",
   "description": "Machine capacity for parallel agents: how many heavy commands run and wait, and how much memory is free, from loadslot.",
   "license": "MIT",
-  "engines": { "orca": ">=1.4.248" },
+  "engines": {
+    "orca": ">=1.4.248"
+  },
   "pluginApi": 1,
   "main": "apps/orca-plugin/src/main.ts",
   "contributes": {
-    "commands": [{ "id": "status", "title": "loadslot: Show status" }],
+    "commands": [
+      {
+        "id": "details",
+        "title": "loadslot: Show details",
+        "action": "sidebar.right.toggle"
+      }
+    ],
+    "panels": [
+      {
+        "id": "details",
+        "title": "loadslot",
+        "icon": "gauge",
+        "entry": "apps/orca-plugin/src/panel.tsx",
+        "ui": "components"
+      }
+    ],
     "statusBarItems": [
-      { "id": "capacity", "text": "loadslot", "icon": "gauge", "tooltip": "loadslot: starting", "command": "status" }
+      {
+        "id": "capacity",
+        "text": "loadslot",
+        "icon": "gauge",
+        "tooltip": "loadslot: starting",
+        "command": "details"
+      }
     ]
   }
 }

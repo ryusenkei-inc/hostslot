@@ -4,12 +4,16 @@
 import { execFile } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { type Item, type Status, describe, summarize, unavailable } from './status.ts';
+import { type Item, type Status, summarize, unavailable } from './status.ts';
+import { type View, view } from './view.ts';
 
 /** The part of Orca's worker API this plugin uses (`orca/worker`). */
 type OrcaWorkerApi = {
-  commands: { register(id: string, handler: () => Promise<string> | string): void };
   host: { call(method: 'statusBar.update', params: { id: string } & Partial<Item>): Promise<unknown> };
+  panels: {
+    handle(name: 'view.get', handler: () => View): void;
+    post(name: 'view', payload: View): void;
+  };
   log(message: string): void;
 };
 
@@ -36,6 +40,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   let found: string | undefined;
   let last: Status | undefined;
   let reason = 'loadslot has not been checked yet';
+  let current: View = view(undefined, reason);
 
   const status = async (): Promise<Status | undefined> => {
     for (const file of found ? [found] : candidates()) {
@@ -58,13 +63,13 @@ export default function activate(orca: OrcaWorkerApi): void {
     const next = last ? `using ${found} (${last.mode} ${last.version ?? ''})`.trim() : `loadslot unavailable: ${reason}`;
     if (next !== state) orca.log((state = next));
     const item = last ? summarize(last) : unavailable(reason);
+    current = view(last, reason);
+    // Posts reach the panel only while it is open; it asks for the latest when it opens.
+    orca.panels.post('view', current);
     await orca.host.call('statusBar.update', { id: ITEM, ...item }).catch((err) => orca.log(`statusBar.update: ${err}`));
   };
 
-  orca.commands.register('status', async () => {
-    await refresh();
-    return last ? describe(last) : unavailable(reason).tooltip;
-  });
+  orca.panels.handle('view.get', () => current);
 
   // Each poll waits for the previous one, so a slow `loadslot status` never piles up.
   const loop = async () => {
