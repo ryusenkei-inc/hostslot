@@ -196,6 +196,7 @@ go test ./...                  # tests
 pnpm install                   # dev tooling and the commit-msg hook
 pnpm lint                      # typecheck of scripts/, prose-lint, shared-file check, go vet
 pnpm test                      # go test ./...
+pnpm check                     # lint and test (run by the pre-push hook, through jobgate when installed)
 npx ryusenkei-conventions sync # write the shared files from @ryusenkei/conventions
 node scripts/env.ts run <cmd>  # run a command with .env loaded
 pnpm env:push [--dry-run]      # push .env values to GitHub Variables / Secrets

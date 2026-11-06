@@ -1,3 +1,8 @@
 #!/bin/sh
 # push の前の検査（`check` のスクリプトを持つリポのみ。CI の失敗・Actions の消費を手元で防止）
+# jobgate があれば資源の空きを待って実行（並行するエージェント・リポの重い検査によるメモリの枯渇を防止）
+#   `check` のないリポは枠を待たない
+if command -v jobgate >/dev/null 2>&1 && grep -q '"check":' package.json 2>/dev/null; then
+  exec jobgate run --weight 2 -- pnpm run check
+fi
 exec pnpm run --if-present check
