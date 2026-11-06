@@ -11,6 +11,7 @@ import (
 
 	"github.com/ryusenkei-inc/hostslot/internal/daemon"
 	"github.com/ryusenkei-inc/hostslot/internal/platform"
+	"github.com/ryusenkei-inc/hostslot/internal/ports"
 	"github.com/ryusenkei-inc/hostslot/internal/setup"
 )
 
@@ -58,6 +59,9 @@ func cmdDoctor(args []string) int {
 			checks = append(checks, c)
 		}
 	}
+	if dir, err := os.Getwd(); err == nil {
+		checks = append(checks, portChecks(dir)...)
+	}
 	if disabled() {
 		checks = append(checks, check{Level: "warn", Text: "HOSTSLOT_DISABLE=1 is set: commands run without the gate",
 			Title: "Hostslot is turned off", Detail: "HOSTSLOT_DISABLE=1 is set, so commands run without the gate."})
@@ -89,6 +93,21 @@ func pathCheck(exe string) check {
 	// plugin installs into its own directory.
 	return check{Level: "warn", Text: fmt.Sprintf("hostslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe)),
 		Title: "Another hostslot executable is on the PATH", Detail: fmt.Sprintf("%s runs in terminals. Delete it and add %s to the PATH.", onPath, filepath.Dir(exe))}
+}
+
+// portChecks warns about package scripts that write a port into their
+// command: their dev servers can't take the worktree's own port.
+func portChecks(dir string) []check {
+	var checks []check
+	for _, h := range ports.HardCodedPorts(dir) {
+		checks = append(checks, check{
+			Level:  "warn",
+			Text:   fmt.Sprintf("script %q hard-codes port %s (%s); parallel worktrees would collide on it. Read PORT instead, or put {port} in the command and run it with hostslot serve", h.Script, h.Port, h.Body),
+			Title:  "A script hard-codes port " + h.Port,
+			Detail: fmt.Sprintf("%s: %s. Read PORT instead, so each worktree gets its own port.", h.Script, h.Body),
+		})
+	}
+	return checks
 }
 
 func daemonCheck(p *platform.Platform) check {

@@ -67,3 +67,15 @@ func TestEnvName(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func TestHardCodedPortsSkipsToolsServeOverrides(t *testing.T) {
+	dir := pkgDir(t, `{"scripts":{"dev":"next dev -p 3000","web":"vite --port 5173","api":"PORT=8080 node api.js","build":"next build"}}`)
+	got := HardCodedPorts(dir)
+	want := []HardCoded{
+		{Script: "api", Body: "PORT=8080 node api.js", Port: "8080"},
+		{Script: "dev", Body: "next dev -p 3000", Port: "3000"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %+v", got)
+	}
+}

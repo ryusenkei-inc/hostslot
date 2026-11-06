@@ -64,6 +64,11 @@ export default defineCheck({
       {
         room: 0,
         memory: { totalMB: 16384, freeMB: 3500 },
+        ports: [
+          { key: 'git:/dev/shop/.git\n/dev/shop\nshop', port: 5173, name: 'shop', worktree: '/dev/shop', running: true, listening: [5173] },
+          { key: 'git:/dev/shop/.git\n/w/fix-cart\nshop', port: 21643, name: 'shop', worktree: '/w/fix-cart', running: true, listening: [21643] },
+          { key: 'git:/dev/blog/.git\n/dev/blog\nblog', port: 3000, name: 'blog', worktree: '/dev/blog', running: false },
+        ],
         recent: [
           done('api', 'pnpm run check', 'machine', 50, 1700),
           done('shop', 'pnpm test', 'ok', 80),

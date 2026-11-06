@@ -111,6 +111,26 @@ it('sums up guard stops; each stopped job stays a row of Recent', () => {
   ]);
 });
 
+it('lists dev servers, running first, and says when one listens elsewhere', () => {
+  const ports = [
+    { key: 'git:/dev/blog/.git\n/dev/blog\nblog', port: 3000, name: 'blog', worktree: '/dev/blog', running: false },
+    { key: 'git:/dev/shop/.git\n/w/fix-cart\nshop', port: 21643, name: 'shop', worktree: '/w/fix-cart', running: true, listening: [5174] },
+  ];
+  const v = view(status({ ports }), '', [], 0, now);
+  expect(v.ports).toEqual([
+    {
+      key: 'git:/dev/shop/.git\n/w/fix-cart\nshop',
+      name: 'shop',
+      where: 'shop (fix-cart)',
+      url: 'http://localhost:21643',
+      running: true,
+      note: 'listens on 5174, not 21643: make it read PORT',
+    },
+    { key: 'git:/dev/blog/.git\n/dev/blog\nblog', name: 'blog', where: 'blog', url: 'http://localhost:3000', running: false },
+  ]);
+  expect(view(status(), '', [], 0, now).ports).toEqual([]);
+});
+
 it('groups jobs by repository', () => {
   const blog = { ...job, id: 9, key: 'git:/dev/blog/.git\napps/web\npnpm build', dir: '/dev/blog/apps/web', currentMB: 1024 };
   const v = view(status({}, { used: 2, running: [job, blog], waiting: [{ ...job, id: 10, reported: false }] }), '', [], 0, now);

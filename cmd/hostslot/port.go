@@ -47,12 +47,16 @@ func cmdPort(args []string) int {
 		if err != nil {
 			return fail(err)
 		}
-		sorted := ports.Sorted(all)
+		sorted := ports.Sorted(all, p.Alive)
 		if *asJSON {
 			return printJSON(sorted)
 		}
-		for _, a := range sorted {
-			fmt.Printf("%-6d %-12s %s\n", a.Port, a.Name, a.Worktree)
+		for _, e := range sorted {
+			state := ""
+			if e.Running {
+				state = "running"
+			}
+			fmt.Printf("%-6d %-12s %-8s %s\n", e.Port, e.Name, state, e.Worktree)
 		}
 		return 0
 	}

@@ -53,6 +53,26 @@ type Assignment struct {
 	Worktree string    `json:"worktree"`
 	Name     string    `json:"name"`
 	Assigned time.Time `json:"assigned"`
+	// PID is the `hostslot serve` running the service, while it runs.
+	PID int `json:"pid,omitempty"`
+	// Listening are the ports its process tree was last seen listening on.
+	Listening []int `json:"listening,omitempty"`
+}
+
+// Observe records what `hostslot serve` sees of its service: the serve
+// process (0 once it ends) and the ports its tree listens on.
+func (r *Registry) Observe(key string, pid int, listening []int) error {
+	all, err := r.read()
+	if err != nil {
+		return err
+	}
+	a, ok := all[key]
+	if !ok {
+		return nil
+	}
+	a.PID, a.Listening = pid, listening
+	all[key] = a
+	return r.write(all)
 }
 
 // Registry is the assignments file. It is not safe for concurrent use:
@@ -211,11 +231,24 @@ func hasIPv6Loopback() bool {
 	return true
 }
 
-// Sorted returns assignments ordered by port, for listing.
-func Sorted(all map[string]Assignment) []Assignment {
-	out := make([]Assignment, 0, len(all))
-	for _, a := range all {
-		out = append(out, a)
+// Entry is an assignment as listed: with its key, and whether its serve
+// process still runs.
+type Entry struct {
+	Key string `json:"key"`
+	Assignment
+	Running bool `json:"running"`
+}
+
+// Sorted returns assignments ordered by port, for listing. alive tells
+// whether a serve process still runs; a stale one doesn't count.
+func Sorted(all map[string]Assignment, alive func(pid int) bool) []Entry {
+	out := make([]Entry, 0, len(all))
+	for k, a := range all {
+		running := a.PID > 0 && alive(a.PID)
+		if !running {
+			a.PID, a.Listening = 0, nil
+		}
+		out = append(out, Entry{Key: k, Assignment: a, Running: running})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Port < out[j].Port })
 	return out
