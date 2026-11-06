@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,6 +32,10 @@ type ClaudeOptions struct {
 	Heavy *regexp.Regexp
 	// Weight is passed to `jobgate run --weight` (1 when below 1).
 	Weight int
+	// Exe is the jobgate executable the rewritten command runs ("jobgate"
+	// from the PATH when empty). An absolute path works without jobgate on
+	// the PATH and skips shims, which cost hundreds of milliseconds a call.
+	Exe string
 }
 
 type claudeInput struct {
@@ -66,7 +71,7 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 		budget, toolTimeout = claudeBudget(time.Duration(ms) * time.Millisecond)
 		input["timeout"] = toolTimeout.Milliseconds()
 	}
-	input["command"] = Wrap(command, strings.Join(heavy, " && "), o.Weight, budget)
+	input["command"] = Wrap(o.Exe, command, strings.Join(heavy, " && "), o.Weight, budget)
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(map[string]any{
@@ -193,8 +198,8 @@ func shellScript(args []*syntax.Word) (string, bool) {
 
 // Wrap returns line as one jobgate job of Claude Code that learns as label.
 // Agents are not at a terminal, so the job runs at background priority.
-func Wrap(line, label string, weight int, b Budget) string {
-	run := "jobgate run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --source claude --as " + shellQuote(label)
+func Wrap(exe, line, label string, weight int, b Budget) string {
+	run := shellExe(exe) + " run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --source claude --as " + shellQuote(label)
 	if b.MaxWait > 0 {
 		run += " --max-wait " + b.MaxWait.String()
 	}
@@ -231,6 +236,14 @@ func claudeBudget(asked time.Duration) (b Budget, toolTimeout time.Duration) {
 	}
 	run = min(run, claudeMaxTimeout-minWait)
 	return Budget{MaxWait: claudeMaxTimeout - run, Timeout: run}, claudeMaxTimeout
+}
+
+// shellExe is exe for a POSIX shell line; the plain name stays unquoted.
+func shellExe(exe string) string {
+	if exe == "" || exe == "jobgate" {
+		return "jobgate"
+	}
+	return shellQuote(filepath.ToSlash(exe))
 }
 
 func shellQuote(s string) string {

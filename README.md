@@ -34,7 +34,14 @@ Or build it with Go 1.26 or later:
 go install github.com/ryusenkei-inc/jobgate/cmd/jobgate@latest
 ```
 
-Make sure `$(go env GOPATH)/bin` is on your `PATH`. Then register the Claude Code hook if you use it: `jobgate setup claude` (see [Claude Code](#claude-code)).
+Make sure `$(go env GOPATH)/bin` is on your `PATH`.
+
+Then connect your coding agents and check the result:
+
+```sh
+jobgate setup    # register the hooks of the agents it finds (Claude Code)
+jobgate doctor   # check the binary, the daemon and the hooks
+```
 
 To upgrade, replace the binary. On Windows a running daemon keeps `jobgate.exe` open: rename the old file first, then put the new one in place. The next `jobgate run` retires the old daemon.
 
@@ -46,7 +53,8 @@ jobgate run [--weight N] [--priority interactive|background] [--as LABEL] [--sou
 jobgate status [--json]
 jobgate daemon [--idle 10m]
 jobgate hook claude [--weight N] [--match REGEX]
-jobgate setup claude [--remove] [--dry-run] [--settings PATH]
+jobgate setup [claude] [--remove] [--dry-run] [--settings PATH]
+jobgate doctor
 jobgate version
 ```
 
@@ -60,7 +68,8 @@ jobgate version
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
-- `hook claude` is a Claude Code hook, and `setup claude` registers it (see [Claude Code](#claude-code)).
+- `hook claude` is a Claude Code hook. `setup` registers it for every agent it finds, or for the one named (see [Claude Code](#claude-code)).
+- `doctor` checks the binary, whether `jobgate` on the `PATH` is the same file, the daemon (running, version), and each agent's hook (registered, pointing at an existing jobgate), and tells how to fix each problem. It exits 1 on warnings or errors.
 
 Example:
 
@@ -88,12 +97,12 @@ waiting (1)
 `jobgate hook claude` is a `PreToolUse` hook that rewrites heavy Bash commands to run through jobgate. Register it for every repository with:
 
 ```sh
-jobgate setup claude            # add or update the hook in Claude Code's user settings
-jobgate setup claude --dry-run  # show what would change
-jobgate setup claude --remove   # remove it
+jobgate setup            # add or update the hook in Claude Code's user settings
+jobgate setup --dry-run  # show what would change
+jobgate setup --remove   # remove it
 ```
 
-`setup` edits only jobgate's own entry in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`; `--settings` picks another file). Other keys keep their order and other tools' hooks stay as they are; the entry goes after existing `PreToolUse` groups. It points the hook at the running `jobgate` executable, so run it again after moving the binary. The result is equivalent to:
+`setup` edits only jobgate's own entry in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`; `--settings` picks another file). Other keys keep their order and other tools' hooks stay as they are; the entry goes after existing `PreToolUse` groups. It points the hook at the running `jobgate`: at the path on the `PATH` when that is the same file (a package manager's link such as Homebrew's `bin` or WinGet's `Links`, which survives upgrades), otherwise at the executable itself. Run it again after moving the binary; `jobgate doctor` tells when that is needed. The result is equivalent to:
 
 ```json
 {
@@ -109,7 +118,7 @@ jobgate setup claude --remove   # remove it
 ```
 
 - The line is parsed as Bash. It is heavy when any of its commands, including those in `$(...)`, subshells and `sh -c` / `bash -c` scripts, is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. Text in quotes, heredocs and comments never counts. `--match <regex>` replaces this list. A line that doesn't parse is left alone.
-- The whole line becomes `jobgate run --weight 1 --priority background --source claude --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
+- The whole line becomes `'<path to jobgate>' run --weight 1 --priority background --source claude --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. The absolute path works without jobgate on the `PATH` and skips shims, which would add hundreds of milliseconds to every call. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
 - Light commands (`git`, `pnpm install`, formatters, prose linters) are left alone, so they never wait. `git push` is left alone too: gate the `pre-push` hook instead (see below).
 - On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `JOBGATE_DISABLE=1` in its environment or in the command line, it does nothing.
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it.
@@ -197,7 +206,7 @@ Limitations:
 
 | Path | Purpose | Depends on |
 | --- | --- | --- |
-| `cmd/jobgate` | CLI: `run`, `status`, `daemon`, `hook`, `setup` | `internal/*` |
+| `cmd/jobgate` | CLI: `run`, `status`, `daemon`, `hook`, `setup`, `doctor` | `internal/*` |
 | `internal/gate` | Scheduler core, OS-independent and pure: slots, admission, priority, learning estimates | — |
 | `internal/platform` | OS ports: metrics, process tracking, IPC, locks, paths. One file per OS, selected by build tags | — |
 | `internal/store` | Learning samples in `samples.json` | — |
@@ -205,7 +214,7 @@ Limitations:
 | `internal/config` | `config.json` and environment overrides | `internal/gate` |
 | `internal/daemon` | Daemon and client: admission over IPC, started on demand | `internal/gate`, `internal/platform`, `internal/store` |
 | `internal/hook` | Agent hooks: rewrite heavy commands to `jobgate run`, text only | — |
-| `internal/setup` | Register agent hooks in the agents' settings files, keeping other entries and key order | — |
+| `internal/setup` | Register agent hooks in the agents' settings files, keeping other entries and key order; find installed agents and stable paths | — |
 | `internal/runner` | `jobgate run`: acquire (daemon or lock fallback), run, release, record | all of the above |
 | `apps/` | TypeScript packages in a pnpm workspace, such as the Orca plugin (`apps/orca-plugin`) | the `jobgate` CLI |
 | `scripts/` | Repository operations, such as managing `.env` | — |
