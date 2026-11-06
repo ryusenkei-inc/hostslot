@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ryusenkei-inc/jobgate/internal/gate"
+	"github.com/ryusenkei-inc/jobgate/internal/jobkey"
 	"github.com/ryusenkei-inc/jobgate/internal/platform"
 	"github.com/ryusenkei-inc/jobgate/internal/store"
 )
@@ -78,10 +79,21 @@ func TestRunWithLockFallback(t *testing.T) {
 		t.Fatalf("%s not set for the gated command: %q", JobVar, out)
 	}
 	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
-	key := gate.Request{Command: o.Args[0], Dir: o.Dir}.Key()
-	peaks := st.Peaks(key)
+	peaks := st.Peaks(jobkey.For(o.Dir, o.Args[0]))
 	if len(peaks) != 1 || peaks[0] < 32 {
 		t.Fatalf("sample not recorded: %v", peaks)
+	}
+}
+
+func TestRunLearnsUnderTheLabel(t *testing.T) {
+	p, o, _ := setup(t, "env")
+	o.Label = "pnpm test"
+	if code, err := Run(p, o); err != nil || code != 7 {
+		t.Fatalf("code %d err %v", code, err)
+	}
+	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
+	if peaks := st.Peaks(jobkey.For(o.Dir, "pnpm test")); len(peaks) != 1 {
+		t.Fatalf("sample not recorded under the label: %v", peaks)
 	}
 }
 
