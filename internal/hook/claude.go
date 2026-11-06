@@ -57,22 +57,26 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 		return nil
 	}
 	command, _ := ev.ToolInput["command"].(string)
-	heavy := HeavyIn(command, ev.Cwd, o.Heavy)
-	if len(heavy) == 0 {
-		return nil
-	}
 	input := make(map[string]any, len(ev.ToolInput))
 	for k, v := range ev.ToolInput {
 		input[k] = v
 	}
 	budget := Budget{}
+	var toolTimeout time.Duration
 	if background, _ := input["run_in_background"].(bool); !background {
 		ms, _ := input["timeout"].(float64)
-		var toolTimeout time.Duration
 		budget, toolTimeout = claudeBudget(time.Duration(ms) * time.Millisecond)
+	}
+	rewritten, _, ok := GateInPlace(command, ev.Cwd, o.Heavy, func(label string, count int) string {
+		return claudePrefix(o.Exe, label, o.Weight, budget.share(count))
+	})
+	if !ok {
+		return nil
+	}
+	if toolTimeout > 0 {
 		input["timeout"] = toolTimeout.Milliseconds()
 	}
-	input["command"] = Wrap(o.Exe, command, strings.Join(heavy, " && "), o.Weight, budget)
+	input["command"] = rewritten
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(map[string]any{
@@ -221,6 +225,29 @@ func Wrap(exe, line, label string, weight int, b Budget) string {
 		run += " --timeout " + b.Timeout.String()
 	}
 	return run + " -- sh -c " + shellQuote(line)
+}
+
+// claudePrefix is what goes before a heavy command of Claude Code: a
+// background job that learns as label.
+func claudePrefix(exe, label string, weight int, b Budget) string {
+	p := shellExe(exe) + " run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --source claude --as " + shellQuote(label)
+	if b.MaxWait > 0 {
+		p += " --max-wait " + b.MaxWait.String()
+	}
+	if b.Timeout > 0 {
+		p += " --timeout " + b.Timeout.String()
+	}
+	return p + " -- "
+}
+
+// share is the budget of one of count gated commands in a line: the wait is
+// split so the line still fits the tool's timeout; each command keeps the
+// whole run time it was asked for.
+func (b Budget) share(count int) Budget {
+	if count > 1 && b.MaxWait > 0 {
+		b.MaxWait = (b.MaxWait / time.Duration(count)).Truncate(time.Second)
+	}
+	return b
 }
 
 // Budget splits an agent's tool timeout between waiting for a slot and
