@@ -89,8 +89,8 @@ waiting (1)
 }
 ```
 
-- A command line is heavy when any of its commands (split at `&&`, `||`, `;`, `|`) is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. `--match <regex>` replaces this list.
-- The whole line becomes `jobgate run --weight 1 --priority background -- sh -c '<line>'`. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
+- The line is parsed as Bash. It is heavy when any of its commands, including those in `$(...)`, subshells and `sh -c` / `bash -c` scripts, is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. Text in quotes, heredocs and comments never counts. `--match <regex>` replaces this list. A line that doesn't parse is left alone.
+- The whole line becomes `jobgate run --weight 1 --priority background --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
 - Light commands (`git`, `pnpm install`, formatters, prose linters) are left alone, so they never wait. `git push` is left alone too: gate the `pre-push` hook instead (see below).
 - On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `JOBGATE_DISABLE=1`, it does nothing.
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it.

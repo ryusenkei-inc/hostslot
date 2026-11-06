@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // DefaultHeavy matches one shell command (after leading variable
@@ -21,11 +23,6 @@ var DefaultHeavy = regexp.MustCompile(`^(?:` +
 	`|go\s+(?:test|build|vet)(?:\s|$)` +
 	`|cargo\s+(?:test|build|check|clippy)(?:\s|$)` +
 	`)`)
-
-var (
-	separators = regexp.MustCompile(`&&|\|\||[;|\n]`)
-	assignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=\S*\s+`)
-)
 
 // ClaudeOptions configure the Claude Code hook.
 type ClaudeOptions struct {
@@ -53,14 +50,15 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 		return nil
 	}
 	command, _ := ev.ToolInput["command"].(string)
-	if !IsHeavy(command, o.Heavy) {
+	heavy := Heavy(command, o.Heavy)
+	if len(heavy) == 0 {
 		return nil
 	}
 	input := make(map[string]any, len(ev.ToolInput))
 	for k, v := range ev.ToolInput {
 		input[k] = v
 	}
-	input["command"] = Wrap(command, o.Weight)
+	input["command"] = Wrap(command, strings.Join(heavy, " && "), o.Weight)
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(map[string]any{
@@ -71,32 +69,119 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 	})
 }
 
-// IsHeavy reports whether any command of a shell command line matches
-// heavy (DefaultHeavy when nil). A line that already starts with jobgate is
-// never heavy, so the hook does not wrap twice.
-func IsHeavy(line string, heavy *regexp.Regexp) bool {
+// Heavy returns the commands of a shell command line that match heavy
+// (DefaultHeavy when nil), as their words joined by spaces. The line is
+// parsed as Bash, so text in quotes, heredocs and comments never counts as
+// a command, and `sh -c` / `bash -c` scripts are looked into. A line that
+// runs jobgate itself, or that does not parse, has no heavy commands: the
+// hook then leaves it alone rather than guess.
+func Heavy(line string, heavy *regexp.Regexp) []string {
 	if heavy == nil {
 		heavy = DefaultHeavy
 	}
-	if strings.HasPrefix(strings.TrimSpace(line), "jobgate ") {
-		return false
+	commands, ok := simpleCommands(line, 0)
+	if !ok {
+		return nil
 	}
-	for _, part := range separators.Split(line, -1) {
-		part = strings.TrimSpace(part)
-		for assignment.MatchString(part) {
-			part = assignment.ReplaceAllString(part, "")
+	var found []string
+	for _, words := range commands {
+		if words[0] == "jobgate" {
+			return nil
 		}
-		if part != "" && heavy.MatchString(part) {
-			return true
+		if c := strings.Join(words, " "); heavy.MatchString(c) {
+			found = append(found, c)
 		}
 	}
-	return false
+	return found
 }
 
-// Wrap returns line as one jobgate job. Agents are not at a terminal, so
-// the job runs at background priority.
-func Wrap(line string, weight int) string {
-	return "jobgate run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background -- sh -c " + shellQuote(line)
+// maxScriptDepth bounds how deep `sh -c` scripts are parsed.
+const maxScriptDepth = 3
+
+// simpleCommands lists the words of every simple command in line, including
+// those inside command substitutions, subshells and `sh -c` scripts.
+func simpleCommands(line string, depth int) ([][]string, bool) {
+	file, err := syntax.NewParser(syntax.Variant(syntax.LangBash)).Parse(strings.NewReader(line), "")
+	if err != nil {
+		return nil, false
+	}
+	var out [][]string
+	ok := true
+	syntax.Walk(file, func(n syntax.Node) bool {
+		call, isCall := n.(*syntax.CallExpr)
+		if !isCall || len(call.Args) == 0 {
+			return true
+		}
+		words := make([]string, len(call.Args))
+		for i, w := range call.Args {
+			words[i] = wordText(w)
+		}
+		out = append(out, words)
+		if script, isScript := shellScript(call.Args); isScript && depth < maxScriptDepth {
+			inner, innerOK := simpleCommands(script, depth+1)
+			out = append(out, inner...)
+			ok = ok && innerOK
+		}
+		return true
+	})
+	return out, ok
+}
+
+// wordText is a word as written, with quotes removed when they only hold
+// literal text (`'pnpm test'` reads as `pnpm test`).
+func wordText(w *syntax.Word) string {
+	if v, ok := literal(w); ok {
+		return v
+	}
+	var b strings.Builder
+	_ = syntax.NewPrinter().Print(&b, w)
+	return b.String()
+}
+
+func literal(w *syntax.Word) (string, bool) {
+	var b strings.Builder
+	for _, part := range w.Parts {
+		switch p := part.(type) {
+		case *syntax.Lit:
+			b.WriteString(p.Value)
+		case *syntax.SglQuoted:
+			b.WriteString(p.Value)
+		case *syntax.DblQuoted:
+			for _, q := range p.Parts {
+				lit, isLit := q.(*syntax.Lit)
+				if !isLit {
+					return "", false
+				}
+				b.WriteString(lit.Value)
+			}
+		default:
+			return "", false
+		}
+	}
+	return b.String(), true
+}
+
+// shellScript returns the script of `sh -c <script>` or `bash -c <script>`.
+func shellScript(args []*syntax.Word) (string, bool) {
+	if len(args) < 3 {
+		return "", false
+	}
+	switch args[0].Lit() {
+	case "sh", "bash", "zsh", "dash":
+	default:
+		return "", false
+	}
+	if args[1].Lit() != "-c" {
+		return "", false
+	}
+	return literal(args[2])
+}
+
+// Wrap returns line as one jobgate job that learns as label. Agents are not
+// at a terminal, so the job runs at background priority.
+func Wrap(line, label string, weight int) string {
+	return "jobgate run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --as " + shellQuote(label) +
+		" -- sh -c " + shellQuote(line)
 }
 
 func shellQuote(s string) string {

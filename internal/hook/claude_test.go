@@ -40,19 +40,38 @@ func TestIsHeavy(t *testing.T) {
 		"go mod tidy",
 		"jobgate run -- pnpm test",
 		"",
+		"python - <<'EOF'\nprint('pnpm test')\nEOF",
+		`node -e 'p.scripts.test="go test ./... && vitest run"'`,
+		`echo "a | pnpm test"`,
+		"git log # pnpm test",
+		"pnpm test 'unclosed",
 	}
 	for _, c := range heavy {
-		if !IsHeavy(c, nil) {
+		if len(Heavy(c, nil)) == 0 {
 			t.Errorf("not heavy: %q", c)
 		}
 	}
 	for _, c := range light {
-		if IsHeavy(c, nil) {
-			t.Errorf("heavy: %q", c)
+		if got := Heavy(c, nil); len(got) != 0 {
+			t.Errorf("heavy: %q (%q)", c, got)
 		}
 	}
-	if !IsHeavy("make all", regexp.MustCompile(`^make\b`)) || IsHeavy("pnpm test", regexp.MustCompile(`^make\b`)) {
+	if len(Heavy("make all", regexp.MustCompile(`^make\b`))) == 0 || len(Heavy("pnpm test", regexp.MustCompile(`^make\b`))) != 0 {
 		t.Error("custom pattern not used")
+	}
+}
+
+func TestHeavyReturnsTheHeavyCommands(t *testing.T) {
+	cases := map[string][]string{
+		`sed -i "s/a/b/" x.ts && pnpm test 2>&1 | grep -E "Tests"`: {"pnpm test"},
+		"CI=1 pnpm lint && pnpm test --run":                        {"pnpm lint", "pnpm test --run"},
+		`bash -c 'cd apps/site && npx vitest run'`:                 {"npx vitest run"},
+		"echo $(go test ./...)":                                    {"go test ./..."},
+	}
+	for line, want := range cases {
+		if got := Heavy(line, nil); strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("%q: got %q, want %q", line, got, want)
+		}
 	}
 }
 
@@ -72,7 +91,7 @@ func TestClaudeRewritesHeavyBash(t *testing.T) {
 		t.Fatalf("%v: %s", err, out.String())
 	}
 	got := res.HookSpecificOutput
-	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "jobgate run --weight 2 --priority background -- sh -c 'pnpm test'" {
+	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "jobgate run --weight 2 --priority background --as 'pnpm test' -- sh -c 'pnpm test'" {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 	if got.UpdatedInput["timeout"] != float64(600000) {
@@ -102,8 +121,8 @@ func TestWrapQuotesForSh(t *testing.T) {
 		}
 	}
 	line := `printf '%s\n' "it's" $HOME`
-	wrapped := Wrap(line, 1)
-	inner := strings.TrimPrefix(wrapped, "jobgate run --weight 1 --priority background -- sh -c ")
+	wrapped := Wrap(line, "x", 1)
+	inner := strings.TrimPrefix(wrapped, "jobgate run --weight 1 --priority background --as 'x' -- sh -c ")
 	// The quoted argument must reach sh as the original line.
 	out, err := exec.Command("sh", "-c", "printf '%s' "+inner).Output()
 	if err != nil {
