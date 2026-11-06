@@ -45,9 +45,9 @@ group('describe', () => {
       [
         'daemon v0.4.0: 1 of 4 slots used, 8.0 GB of 16.0 GB free, 8 CPUs',
         'Running:',
-        '  pnpm test (claude, 512 MB of ~2.0 GB, 1m05s)',
+        '  pnpm test (r/app, claude, 512 MB of ~2.0 GB, 1m05s)',
         'Waiting:',
-        '  pnpm test (terminal, ~2.0 GB, 1m05s)',
+        '  pnpm test (r/app, terminal, ~2.0 GB, 1m05s)',
       ].join('\n'),
     );
   });

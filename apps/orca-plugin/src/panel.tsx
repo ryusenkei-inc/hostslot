@@ -37,7 +37,7 @@ function Jobs({ title, rows }: { title: string; rows: JobRow[] }) {
   return (
     <List label={title}>
       {rows.map((r) => (
-        <ListItem key={r.key} title={r.title} description={`${r.source} · ${r.memory}`}>
+        <ListItem key={r.key} title={r.title} description={[r.where, r.source, r.memory].filter(Boolean).join(' · ')}>
           <RelativeTime at={r.since} format="duration" muted />
         </ListItem>
       ))}

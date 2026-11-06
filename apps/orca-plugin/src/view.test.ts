@@ -33,7 +33,7 @@ it('lists running and waiting jobs by their learning name', () => {
   const v = view(status({ used: 4, running: [job], waiting: [{ ...job, id: 8, reported: false, source: undefined }] }));
   expect(v.headline).toBe('1 waiting for room');
   expect(v.tone).toBe('warning');
-  expect(v.running[0]).toEqual({ key: '7', title: 'pnpm test', source: 'claude', memory: '512 MB of ~2.0 GB', since: Date.parse(job.started) });
+  expect(v.running[0]).toEqual({ key: '7', title: 'pnpm test', where: 'r', source: 'claude', memory: '512 MB of ~2.0 GB', since: Date.parse(job.started) });
   expect(v.waiting[0]).toMatchObject({ key: '8', source: 'terminal', memory: '~2.0 GB', since: Date.parse(job.queued) });
 });
 
