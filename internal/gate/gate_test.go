@@ -257,3 +257,20 @@ func TestEstimateUsesAHighPercentileOnceLearned(t *testing.T) {
 		t.Fatalf("few samples: %d", est)
 	}
 }
+
+func TestLargestPicksTheBiggestBackgroundJob(t *testing.T) {
+	s := New(cfg(), 4, nil)
+	small := s.Enqueue(Request{Command: "small", Weight: 1, Priority: Background}, t0)
+	big := s.Enqueue(Request{Command: "big", Weight: 1, Priority: Background}, t0)
+	person := s.Enqueue(Request{Command: "person", Weight: 1, Priority: Interactive}, t0)
+	s.Admit(t0, 100000)
+	if _, _, ok := s.Largest(); ok {
+		t.Fatal("chose a job that never reported")
+	}
+	s.Report(small.ID, 300)
+	s.Report(big.ID, 900)
+	s.Report(person.ID, 5000)
+	if id, mb, ok := s.Largest(); !ok || id != big.ID || mb != 900 {
+		t.Fatalf("got %d %d %v, want the big background job", id, mb, ok)
+	}
+}

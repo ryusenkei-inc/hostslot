@@ -74,8 +74,9 @@ func Spawn(p *platform.Platform) error {
 
 // Lease is an admitted job held over an open connection.
 type Lease struct {
-	mu   sync.Mutex
-	conn net.Conn
+	mu      sync.Mutex
+	conn    net.Conn
+	stopped chan struct{}
 	// Job is the admitted job with its estimate and effective weight.
 	Job gate.Job
 	// Status is the gate state at admission.
@@ -115,9 +116,30 @@ func Acquire(c net.Conn, req gate.Request, deadline time.Time, onWait func(Messa
 			if m.Job == nil || m.Status == nil {
 				return nil, errors.New("malformed grant")
 			}
-			return &Lease{conn: c, Job: *m.Job, Status: *m.Status}, nil
+			l := &Lease{conn: c, Job: *m.Job, Status: *m.Status, stopped: make(chan struct{})}
+			go l.watch(r)
+			return l, nil
 		case TypeError:
 			return nil, errors.New(m.Error)
+		}
+	}
+}
+
+// Stopped is closed when the daemon asks for the job to be stopped
+// (TypeStop): the machine is nearly out of memory.
+func (l *Lease) Stopped() <-chan struct{} { return l.stopped }
+
+// watch reads what the daemon sends while the job runs, until the
+// connection closes.
+func (l *Lease) watch(r *bufio.Reader) {
+	for {
+		var m Message
+		if readMessage(r, &m) != nil {
+			return
+		}
+		if m.Type == TypeStop {
+			close(l.stopped)
+			return
 		}
 	}
 }

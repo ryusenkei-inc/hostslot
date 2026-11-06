@@ -23,6 +23,9 @@ type lease struct {
 	release func(*store.Sample)
 	// report sends the job's current memory (nil in lock mode).
 	report func(currentMB uint64)
+	// stopped is closed when the daemon asks to stop the job (nil in lock
+	// mode).
+	stopped <-chan struct{}
 }
 
 const statusEvery = 5 * time.Second
@@ -47,7 +50,7 @@ func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, deadline t
 					m.Position, len(s.Snapshot.Waiting), s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB, m.Job.EstimateMB)
 			})
 			if err == nil {
-				return &lease{job: l.Job, slots: l.Status.Snapshot.Slots, cpus: l.Status.CPUs, mode: "daemon", release: l.Release, report: l.Report}, nil
+				return &lease{job: l.Job, slots: l.Status.Snapshot.Slots, cpus: l.Status.CPUs, mode: "daemon", release: l.Release, report: l.Report, stopped: l.Stopped()}, nil
 			}
 			c.Close()
 			if errors.Is(err, daemon.ErrBusy) {

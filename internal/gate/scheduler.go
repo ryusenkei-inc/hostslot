@@ -210,6 +210,18 @@ func (s *Scheduler) Room(now time.Time, freeMB uint64) int {
 	return max(min(slots, byMemory), 0)
 }
 
+// Largest returns the running background job that uses the most memory
+// now, by its reports. Interactive jobs are never chosen: a person is
+// waiting on them.
+func (s *Scheduler) Largest() (id uint64, currentMB uint64, ok bool) {
+	for _, j := range s.running {
+		if j.Priority == Background && j.Reported && j.CurrentMB > currentMB {
+			id, currentMB, ok = j.ID, j.CurrentMB, true
+		}
+	}
+	return id, currentMB, ok
+}
+
 // reserve is the memory a running job may still take beyond the free
 // memory reading.
 func (s *Scheduler) reserve(j *Job, now time.Time) uint64 {
