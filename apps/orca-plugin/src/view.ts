@@ -1,6 +1,6 @@
 // What the details panel shows, built by the worker from `loadslot status
 // --json` and posted to the panel. Pure, so it is tested without Orca.
-import type { Job, Status } from './status.ts';
+import type { Job, Problem, Status } from './status.ts';
 
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 
@@ -22,13 +22,15 @@ export type View = {
   running: JobRow[];
   waiting: JobRow[];
   problem?: { title: string; detail: string; link: string };
+  /** Warnings and errors about the setup, with what to do. */
+  problems: Problem[];
 };
 
 const installLink = 'https://github.com/ryusenkei-inc/loadslot#install';
 const lowMemoryShare = 0.1;
 
-/** The view of a status, or of why loadslot could not be read. */
-export function view(s: Status | undefined, reason = ''): View {
+/** The view of a status and the setup's problems, or of why loadslot could not be read. */
+export function view(s: Status | undefined, reason = '', problems: Problem[] = []): View {
   if (!s) {
     return {
       headline: 'loadslot not found',
@@ -37,6 +39,7 @@ export function view(s: Status | undefined, reason = ''): View {
       running: [],
       waiting: [],
       problem: { title: 'loadslot is not installed or not reachable', detail: reason, link: installLink },
+      problems: [],
     };
   }
   const { slots, used, running, waiting } = s.snapshot;
@@ -48,6 +51,10 @@ export function view(s: Status | undefined, reason = ''): View {
     tone = 'warning';
     headline = `${waiting.length} waiting for room`;
   }
+  if (problems.length > 0 && tone !== 'warning') {
+    tone = 'warning';
+    headline = `${problems.length} setup ${problems.length === 1 ? 'problem' : 'problems'}`;
+  }
   if (low) {
     tone = 'danger';
     headline = 'Memory nearly gone';
@@ -57,6 +64,7 @@ export function view(s: Status | undefined, reason = ''): View {
     tone,
     facts: [
       { label: 'Slots', value: `${used} / ${slots}` },
+      ...(s.room !== undefined ? [{ label: 'Room now', value: `${s.room} more heavy ${s.room === 1 ? 'job' : 'jobs'}` }] : []),
       // Orca refuses values that are not plain JSON, so no `tone: undefined`.
       { label: 'Free memory', value: `${gb(free)} of ${gb(s.memory.totalMB)}`, ...(low ? { tone: 'danger' as const } : {}) },
       { label: 'CPUs', value: String(s.cpus) },
@@ -64,6 +72,7 @@ export function view(s: Status | undefined, reason = ''): View {
     ],
     running: running.map((j) => row(j, j.started)),
     waiting: waiting.map((j) => row(j, j.queued)),
+    problems,
   };
 }
 

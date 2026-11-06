@@ -60,6 +60,11 @@ export default function Panel() {
           <Link href={v.problem.link}>How to install loadslot</Link>
         </Callout>
       ) : null}
+      {v.problems.map((p) => (
+        <Callout key={p.text} tone={p.level === 'error' ? 'danger' : 'warning'} title={p.level === 'error' ? 'Error' : 'Warning'}>
+          <Text>{p.text}</Text>
+        </Callout>
+      ))}
       {v.facts.length > 0 ? <KeyValue label="Machine" items={v.facts} /> : null}
       <Heading level={2}>Running</Heading>
       {v.running.length > 0 ? <Jobs title="Running" rows={v.running} /> : <Text muted>No heavy command is running.</Text>}

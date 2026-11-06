@@ -58,3 +58,18 @@ it('tells how to install loadslot when it is missing', () => {
   expect(item.tone).toBe('warning');
   expect(item.tooltip).toContain('https://github.com/ryusenkei-inc/loadslot#install');
 });
+
+it('warns in the status bar when the setup has problems', () => {
+  const item = summarize({ ...base, room: 4 }, [{ level: 'error', text: 'the hook runs a missing loadslot' }]);
+  expect(item).toMatchObject({ tone: 'warning', icon: 'warning' });
+  expect(item.tooltip.split('\n')[0]).toBe('! the hook runs a missing loadslot');
+  expect(item.tooltip).toContain('Room for 4 more heavy jobs now');
+});
+
+it("keeps the tooltip within Orca's 256 characters", () => {
+  const many = Array.from({ length: 20 }, (_, i) => ({ ...job, command: `job ${i}`, key: `k\n.\n${'x'.repeat(50)} ${i}` }));
+  const s = { ...base, snapshot: { ...base.snapshot, used: 4, running: many, waiting: many } };
+  const item = summarize(s, [{ level: 'warn', text: 'y'.repeat(300) }, { level: 'warn', text: 'z' }]);
+  expect(item.tooltip.length).toBeLessThanOrEqual(256);
+  expect(item.tooltip).toMatch(/^! y+/);
+});
