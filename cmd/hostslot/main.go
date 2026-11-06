@@ -40,6 +40,7 @@ Usage:
   hostslot setup [claude|codex] [--remove] [--dry-run] [--settings PATH]
   hostslot doctor
   hostslot port [--default PORT] [--json] <name> | --list
+  hostslot serve [--name NAME] [--default PORT] [--fixed PORT] -- <command> [args...]
   hostslot version
 
 Environment:
@@ -76,6 +77,8 @@ func run(args []string) int {
 		return cmdDoctor(args[1:])
 	case "port":
 		return cmdPort(args[1:])
+	case "serve":
+		return cmdServe(args[1:])
 	case "version", "--version":
 		fmt.Println(version())
 		return 0

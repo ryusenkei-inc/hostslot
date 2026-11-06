@@ -188,22 +188,24 @@ Where Hostslot is installed but not wanted (CI), set `HOSTSLOT_DISABLE=1`.
 
 ## Dev-server ports
 
-Parallel worktrees, of one repository or several, start the same dev servers on the same default ports. Hostslot gives each service of each worktree its own port, and keeps it:
+Parallel worktrees, of one repository or several, start the same dev servers on the same default ports, and some (Vite) quietly move to the next one, so agents and tests reach another worktree's server. Hostslot gives each service of each worktree its own port, keeps it, and hands it over:
 
 ```sh
-hostslot port --default 5173 web   # 5173 for the first worktree that asks, a port from 20000-29999 for the others
-PORT=$(hostslot port web) pnpm dev
-hostslot port --list               # every assigned port, with its worktree
+hostslot serve -- pnpm dev          # hostslot: shop on http://localhost:21643 (PORT=21643)
+hostslot serve -- vite --port {port}
+hostslot serve --fixed 3000 -- pnpm dev   # a port that can't move (an OAuth callback): one worktree at a time
+hostslot port web                   # just print the port
+hostslot port --list                # every assigned port, with its worktree
 ```
 
 | | |
 | --- | --- |
-| **Key** | Repository + worktree + service name, like learned costs |
-| **Default port** | Goes to the first service that asks while nothing listens on it, and stays with it |
-| **Others** | A free port from 20000-29999, starting where the key points, so it rarely changes |
+| **Service** | The package's name without its scope (`@acme/shop` → `shop`), else its directory; `--name` to choose |
+| **Port** | The tool's default (Vite 5173, Next.js 3000) for the first service that asks while nothing listens on it, and it stays with it. Others get a free port from 20000-29999, starting where the key (repository + worktree + service) points |
+| **Handed over** | `PORT`, `PORT_<NAME>` and `HOSTSLOT_PORT`; `{port}` in the command; for Vite, `--port N --strictPort` appended, also over a port written in the script |
+| **Checked** | When nothing listens on the port after 30 s, it says the app likely ignores `PORT` and how to fix it |
 | **Freed** | When the worktree is removed |
-
-Planned (#71): `hostslot serve` hands the port to the dev server (`PORT`, `{port}`, flags for tools such as Vite), reports the port it actually listens on, and dev-server commands of agents go through it.
+| **Slots** | None: a dev server runs for hours and doesn't wait for capacity |
 
 ## Reference
 
@@ -217,6 +219,7 @@ Planned (#71): `hostslot serve` hands the port to the dev server (`PORT`, `{port
 | `hostslot doctor [--json]` | Check the binary, the `PATH`, the daemon and the hooks, with how to fix each problem; exits 1 on warnings |
 | `hostslot port [--default PORT] [--json] <name>` | Print the port of a dev server of this worktree, assigning one on first use |
 | `hostslot port --list [--json]` | Every assigned port, with its service and worktree |
+| `hostslot serve [--name N] [--default P] [--fixed P] -- <command>` | Run a dev server on its port (see [Dev-server ports](#dev-server-ports)) |
 | `hostslot hook claude\|codex [--weight N] [--match REGEX]` | The hook of Claude Code or Codex (registered by `setup`) |
 | `hostslot daemon [--idle 10m]` | Run the daemon in the foreground (not needed normally) |
 | `hostslot version` | Print the version |
