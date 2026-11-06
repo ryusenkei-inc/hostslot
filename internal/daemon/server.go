@@ -32,6 +32,12 @@ type Server struct {
 	Interval time.Duration
 	// IdleTimeout ends Serve after this long without jobs or clients.
 	IdleTimeout time.Duration
+	// Version is reported in Status so newer clients can retire this daemon.
+	Version string
+
+	// retire stops accepting clients and frees the daemon lock (set by Run).
+	retire   func()
+	retiring bool
 
 	mu         sync.Mutex
 	sched      *gate.Scheduler
@@ -53,10 +59,16 @@ func Run(p *platform.Platform, srv *Server) error {
 	if !ok {
 		return ErrRunning
 	}
-	defer unlock()
+	var once sync.Once
+	release := func() { once.Do(unlock) }
+	defer release()
 	l, err := p.IPC.Listen()
 	if err != nil {
 		return err
+	}
+	srv.retire = func() {
+		l.Close()
+		release()
 	}
 	return srv.Serve(l)
 }
@@ -87,11 +99,26 @@ func (s *Server) Serve(l net.Listener) error {
 		c, err := l.Accept()
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
+				s.awaitClients()
 				return nil
 			}
 			return err
 		}
 		go s.handle(c)
+	}
+}
+
+// awaitClients lets the jobs of a retired daemon finish; after an idle
+// close there are none.
+func (s *Server) awaitClients() {
+	for {
+		s.mu.Lock()
+		n := s.clients
+		s.mu.Unlock()
+		if n == 0 {
+			return
+		}
+		time.Sleep(s.Interval)
 	}
 }
 
@@ -144,9 +171,14 @@ func (s *Server) cycleLocked(full bool) {
 func (s *Server) status() *Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	mode := "daemon"
+	if s.retiring {
+		mode = "daemon (retiring)"
+	}
 	return &Status{
-		Mode:     "daemon",
+		Mode:     mode,
 		PID:      os.Getpid(),
+		Version:  s.Version,
 		Memory:   s.memory,
 		CPUs:     s.Metrics.CPUs(),
 		Tracker:  s.Tracker,
@@ -176,6 +208,17 @@ func (s *Server) handle(c net.Conn) {
 	switch m.Op {
 	case OpStatus:
 		_ = enc.Encode(Message{Type: TypeStatus, Status: s.status()})
+	case OpRetire:
+		s.mu.Lock()
+		retire := s.retire
+		s.retiring = retire != nil
+		s.mu.Unlock()
+		if retire == nil {
+			_ = enc.Encode(Message{Type: TypeError, Error: "cannot retire"})
+			return
+		}
+		retire()
+		_ = enc.Encode(Message{Type: TypeRetired})
 	case OpAcquire:
 		if m.Request == nil {
 			_ = enc.Encode(Message{Type: TypeError, Error: "acquire without request"})

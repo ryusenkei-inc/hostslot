@@ -29,6 +29,9 @@ const statusEvery = 5 * time.Second
 // first, in either mode.
 func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, deadline time.Time, noDaemon bool, stderr io.Writer) (*lease, error) {
 	if !noDaemon {
+		if daemon.RetireOlder(p, daemon.Version()) {
+			fmt.Fprintln(stderr, "jobgate: retired an older daemon; it exits after its current jobs")
+		}
 		c, err := daemon.Connect(p)
 		if err == nil {
 			var last time.Time
