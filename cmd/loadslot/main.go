@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"strconv"
@@ -35,8 +36,8 @@ Usage:
               -- <command> [args...]
   loadslot status [--json]
   loadslot daemon
-  loadslot hook claude [--weight N] [--match REGEX]
-  loadslot setup [claude] [--remove] [--dry-run] [--settings PATH]
+  loadslot hook claude|codex [--weight N] [--match REGEX]
+  loadslot setup [claude|codex] [--remove] [--dry-run] [--settings PATH]
   loadslot doctor
   loadslot version
 
@@ -176,14 +177,16 @@ func resolvePriority(flagValue string) (gate.Priority, error) {
 	return p, nil
 }
 
-// cmdHook exits 1 on errors: Claude Code reports exit 1 as a non-blocking
-// hook error and runs the command unchanged, while 2 would block it.
+// cmdHook exits 1 on errors: Claude Code and Codex report exit 1 as a
+// non-blocking hook error and run the command unchanged, while 2 would block
+// it.
 func cmdHook(args []string) int {
-	if len(args) == 0 || args[0] != "claude" {
-		fmt.Fprintln(os.Stderr, "loadslot hook: missing agent (loadslot hook claude)")
+	if len(args) == 0 || (args[0] != "claude" && args[0] != "codex") {
+		fmt.Fprintln(os.Stderr, "loadslot hook: missing agent (loadslot hook claude|codex)")
 		return 1
 	}
-	fs := flag.NewFlagSet("hook claude", flag.ContinueOnError)
+	agent := args[0]
+	fs := flag.NewFlagSet("hook "+agent, flag.ContinueOnError)
 	weight := fs.Int("weight", 1, "weight of the wrapped commands; a hint until samples exist")
 	match := fs.String("match", "", "regular expression for the commands to gate (default: built-in list)")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -193,16 +196,23 @@ func cmdHook(args []string) int {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return 0
 	}
-	o := hook.ClaudeOptions{Weight: *weight, Exe: hookExe()}
+	var heavy *regexp.Regexp
 	if *match != "" {
 		re, err := regexp.Compile(*match)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "loadslot hook: --match: %v\n", err)
 			return 1
 		}
-		o.Heavy = re
+		heavy = re
 	}
-	if err := hook.Claude(os.Stdin, os.Stdout, o); err != nil {
+	var err error
+	if agent == "claude" {
+		err = hook.Claude(os.Stdin, os.Stdout, hook.ClaudeOptions{Heavy: heavy, Weight: *weight, Exe: hookExe()})
+	} else {
+		o := hook.CodexOptions{Heavy: heavy, Weight: *weight, Exe: hookExe(), PowerShell: runtime.GOOS == "windows"}
+		err = hook.Codex(os.Stdin, os.Stdout, o)
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "loadslot hook: %v\n", err)
 		return 1
 	}
@@ -216,7 +226,7 @@ func cmdSetup(args []string) int {
 	named := len(args) > 0 && !strings.HasPrefix(args[0], "-")
 	if named {
 		if !slices.Contains(setup.Agents, setup.Agent(args[0])) {
-			fmt.Fprintf(os.Stderr, "loadslot setup: unknown agent %q (claude)\n", args[0])
+			fmt.Fprintf(os.Stderr, "loadslot setup: unknown agent %q (claude, codex)\n", args[0])
 			return 2
 		}
 		agents = []setup.Agent{setup.Agent(args[0])}
@@ -263,10 +273,13 @@ func cmdSetup(args []string) int {
 			verb = "would have " + verb
 		}
 		fmt.Printf("%s: %s\n", file, verb)
+		if a == setup.Codex && !*dryRun && (res == setup.Added || res == setup.Updated) {
+			fmt.Println("Codex runs a new or changed hook only after you trust it: start Codex and review it with /hooks. It gates sessions without approvals and outside the sandbox (full access)")
+		}
 		done++
 	}
 	if done == 0 {
-		fmt.Println("No supported agent found (Claude Code). Install one, or name it: loadslot setup claude")
+		fmt.Println("No supported agent found (Claude Code, Codex). Install one, or name it: loadslot setup claude")
 	}
 	// Setup follows an install or upgrade, so an older daemon is retired now
 	// rather than at the next run (its running jobs still finish).

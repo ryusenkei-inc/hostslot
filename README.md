@@ -11,7 +11,7 @@ loadslot run -- pnpm test     # waits for a slot, then runs pnpm test
 ## Quick start
 
 1. Install: download the archive for your OS from [Releases](https://github.com/ryusenkei-inc/loadslot/releases) and put `loadslot` on your `PATH`, or `go install github.com/ryusenkei-inc/loadslot/cmd/loadslot@latest` (Go 1.26+).
-2. Connect your agents: `loadslot setup` registers the Claude Code hook.
+2. Connect your agents: `loadslot setup` registers the hooks of Claude Code and Codex.
 3. Check: `loadslot doctor`.
 
 To upgrade, replace the binary (on Windows, rename the running `loadslot.exe` first) and run `loadslot setup`, which also retires the old daemon.
@@ -78,7 +78,7 @@ You decide with `loadslot run`. The integrations decide like this:
 
 | Integration | Gated |
 | --- | --- |
-| Agent hooks (Claude Code) | Each heavy command in the line, rewritten in place (below); the rest of the line runs as written |
+| Agent hooks (Claude Code, Codex) | Each heavy command in the line, rewritten in place (below); the rest of the line runs as written |
 | git pre-push | The push's `check` script |
 | Package scripts | Whatever you wrap |
 
@@ -89,7 +89,7 @@ A command is heavy when it is one of:
 - `vitest`, `jest`, `tsc`, `playwright` (also through `npx`, `pnpm exec`, `bunx`)
 - `go test|build|vet`, `cargo test|build|check|clippy`
 
-The line is parsed as shell, so text in quotes, heredocs and comments never counts. Installs, git, formatters and prose linters stay ungated and never wait. `loadslot hook claude --match <regex>` replaces the list.
+The line is parsed as shell, so text in quotes, heredocs and comments never counts. Installs, git, formatters and prose linters stay ungated and never wait. `loadslot hook claude --match <regex>` (or `hook codex`) replaces the list.
 
 ## What it learns
 
@@ -139,6 +139,18 @@ cd apps/site && '<loadslot>' run --priority background --source claude --as 'pnp
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it
 - `LOADSLOT_DISABLE=1` in the environment or the command line turns it off
 
+### Codex
+
+`loadslot setup` also adds a `PreToolUse` hook to `~/.codex/hooks.json` (or `$CODEX_HOME`). Codex runs a new or changed hook only after you trust it: start Codex and review it with `/hooks`.
+
+The hook rewrites heavy commands in place, as for Claude Code; on Windows the prefix is PowerShell (`& '<loadslot>' run … -- pnpm test`). It gates only where it can:
+
+| Codex session | What happens |
+| --- | --- |
+| No approvals, no sandbox (full access, `--dangerously-bypass-approvals-and-sandbox`) | Gated |
+| No approvals, in the sandbox | Rewritten, but the sandbox keeps loadslot from its daemon (on Windows it is another user), so the command runs ungated |
+| With approvals | Left alone: Codex applies a rewrite only with an "allow" decision, which may skip your approval |
+
 ### git pre-push
 
 ```sh
@@ -164,9 +176,9 @@ Where loadslot is installed but not wanted (CI), set `LOADSLOT_DISABLE=1`.
 | --- | --- |
 | `loadslot run [flags] -- <command>` | Wait for admission, then run the command with stdin, stdout and stderr passed through; prints a status line to stderr every 5 s while waiting |
 | `loadslot status [--json]` | Slots, memory, room for more, running, waiting and recent jobs. `--json` adds held memory, wait reasons and typical durations |
-| `loadslot setup [claude] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds, and retire an older daemon |
+| `loadslot setup [claude\|codex] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds, and retire an older daemon |
 | `loadslot doctor [--json]` | Check the binary, the `PATH`, the daemon and the hooks, with how to fix each problem; exits 1 on warnings |
-| `loadslot hook claude [--weight N] [--match REGEX]` | The Claude Code hook (registered by `setup`) |
+| `loadslot hook claude\|codex [--weight N] [--match REGEX]` | The hook of Claude Code or Codex (registered by `setup`) |
 | `loadslot daemon [--idle 10m]` | Run the daemon in the foreground (not needed normally) |
 | `loadslot version` | Print the version |
 

@@ -9,8 +9,7 @@ import (
 )
 
 // Agents are the agents `loadslot setup` registers when they are installed.
-// Codex joins once its hook is verified end to end.
-var Agents = []Agent{Claude}
+var Agents = []Agent{Claude, Codex}
 
 // Detected reports whether the agent looks installed: its settings
 // directory exists or its CLI is on the PATH.
