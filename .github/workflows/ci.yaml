@@ -1,15 +1,14 @@
-# push・PR ごとの検査。1 ジョブで手順に名前を付け、失敗した検査を画面で識別
+# Checks on pushes to main and on pull requests. Each step has a name so a failed check is easy to find
 name: CI
 
-# main への push と PR だけ
 on:
   push:
     branches: [main]
   pull_request:
-    # `edited` = PR のタイトルの変更でも再検査
+    # `edited` re-runs the checks when the PR title changes
     types: [opened, synchronize, reopened, edited]
 
-# 同じ ref の新しい実行が来たら古い実行を中止
+# A newer run on the same ref cancels the older one
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -23,21 +22,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # 秘密値の検査は全履歴が対象
-      # Node・Terraform = mise.toml
+          fetch-depth: 0 # the secret scan covers the whole history
+      # Node.js for the dev tooling (mise.toml)
       - uses: jdx/mise-action@v4
       - uses: pnpm/action-setup@v6
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Typecheck
         run: pnpm typecheck
-      - name: Test
-        run: pnpm test
       - name: Prose lint
         run: pnpm lint:prose
-      # squash merge → main のコミットのメッセージ = PR のタイトル（手元の commit-msg フックの対象外）
-      #   タイトルは環境変数で受け渡し（式の展開によるコマンドの注入を防止）
-      #   Dependabot の PR は英語の定型のタイトル → 対象外
+      # The squash commit message on main is the PR title, which the local commit-msg hook never sees
+      #   The title goes through an environment variable so it can't inject commands
+      #   Dependabot PRs use fixed English titles and are skipped
       - name: PR title
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
         env:
@@ -45,6 +42,30 @@ jobs:
         run: |
           printf '%s\n' "$TITLE" > "$RUNNER_TEMP/title"
           pnpm exec prose-lint --commit-msg "$RUNNER_TEMP/title"
-      # gitleaks-action は組織での利用に有料ライセンスが必要 → CLI の公式イメージを直接実行
+      # gitleaks-action needs a paid license for organizations, so run the official CLI image
       - name: Secret scan
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --config /repo/.gitleaks.toml --redact --verbose
+
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      # Go version from go.mod
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Vet
+        run: go vet ./...
+      - name: Test
+        run: go test ./...
+      - name: Cross-compile
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
+            echo "== $target"
+            GOOS=${target%/*} GOARCH=${target#*/} go build ./...
+          done
