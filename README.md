@@ -1,28 +1,38 @@
 # Hostslot
 
+[![CI](https://github.com/ryusenkei-inc/hostslot/actions/workflows/ci.yaml/badge.svg)](https://github.com/ryusenkei-inc/hostslot/actions/workflows/ci.yaml)
+[![Release](https://img.shields.io/github/v/release/ryusenkei-inc/hostslot)](https://github.com/ryusenkei-inc/hostslot/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
 Run more coding agents in parallel without freezing your machine.
 
-Hostslot schedules what parallel coding agents share on one machine. Heavy commands (type checks, test runners, builds) get capacity: each starts when there is room in memory and CPU, the rest wait their turn, and a runaway is stopped before it takes the machine down. Exclusive resources such as dev-server ports get leased per worktree (planned).
+Hostslot schedules what parallel coding agents share on one machine:
 
-```sh
-hostslot run -- pnpm test     # waits for a slot, then runs pnpm test
-```
+- **Capacity for heavy commands.** Type checks, test runners and builds start when there is room in memory and CPU; the rest wait their turn, and a runaway is stopped before it takes the machine down
+- **A port for each dev server.** Every worktree's dev server gets its own port, and agents are told the URL, so they never reach another worktree's server
+
+<img src="docs/images/orca-panel.png" alt="The Hostslot panel in Orca: memory and slots, running and waiting jobs, a guard stop, recent jobs" width="360">
 
 ## Quick start
 
-1. Install: download the archive for your OS from [Releases](https://github.com/ryusenkei-inc/hostslot/releases) and put `hostslot` on your `PATH`, or `go install github.com/ryusenkei-inc/hostslot/cmd/hostslot@latest` (Go 1.26+).
-2. Connect your agents: `hostslot setup` registers the hooks of Claude Code and Codex.
-3. Check: `hostslot doctor`.
+**In [Orca](https://github.com/stablyai/orca):** add the Hostslot plugin, open its panel from the status bar and press **Install Hostslot**. It downloads the release for your OS, checks it, and connects Claude Code and Codex.
 
-To upgrade, replace the binary (on Windows, rename the running `hostslot.exe` first) and run `hostslot setup`, which also retires the old daemon.
+**Without Orca:**
 
-From then on, heavy commands your agents run go through Hostslot. `hostslot status` shows what runs and waits; in [Orca](#orca), the status bar and a panel show it.
+1. Download the archive for your OS from [Releases](https://github.com/ryusenkei-inc/hostslot/releases) and put `hostslot` on your `PATH`, or `go install github.com/ryusenkei-inc/hostslot/cmd/hostslot@latest` (Go 1.26+)
+2. `hostslot setup` registers the hooks of Claude Code and Codex
+3. `hostslot doctor` checks the setup
 
-In Orca, the plugin does steps 1 and 2 for you: its panel offers to install Hostslot and run its setup.
+From then on, your agents' heavy commands go through Hostslot and their dev servers get their own ports. `hostslot status` shows what runs and waits. To upgrade, replace the binary (on Windows, rename the running `hostslot.exe` first) and run `hostslot setup`.
+
+```sh
+hostslot run -- pnpm test      # waits for room, then runs pnpm test
+hostslot serve -- pnpm dev     # runs the dev server on this worktree's port
+```
 
 ## Why
 
-Several agents, each in its own worktree, start `tsc`, test suites and builds at the same time. On a 16 GB machine that exhausts memory: everything freezes and the OOM killer takes agents with it. Agent IDEs can cap the number of agents, but nothing coordinates the commands they run.
+Several agents, each in its own worktree, start `tsc`, test suites and builds at the same time. On a 16 GB machine that exhausts memory: everything freezes and the OOM killer takes agents with it. Their dev servers also start on the same default ports, and some quietly move to the next one, so an agent's tests reach another worktree's app. Agent IDEs can cap the number of agents, but nothing coordinates what the agents run.
 
 ### Why at the process level
 
@@ -31,13 +41,13 @@ Several agents, each in its own worktree, start `tsc`, test suites and builds at
 | Tool limits don't add up | `--maxWorkers` or an IDE's agent limit each bound one program; four agents that respect theirs still start four type checks together |
 | The cost is in commands | Agents cost little while they think. Gating their heavy commands, not the agents, keeps many agents working and lets only the heavy parts take turns |
 | Only the OS sees it all | The process tree shows a command's real memory, children included, in any language; the OS can also act on it (priority, Job Objects, signals) |
-| It works with anything | A command line in, the same command out: one gate for agents, people, git hooks and scripts |
+| It works with anything | A command line in, the same command out: one scheduler for agents, people, git hooks and scripts |
 
 The OS's own tools don't queue: cgroups and Job Object limits make a capped build fail instead of wait, early-OOM killers act after memory is gone, and the scheduler has no notion of jobs worth waiting for. Hostslot uses those mechanisms and adds a queue, priorities and learned costs.
 
 ### Hostslot and Orca
 
-Hostslot is made for [Orca](https://github.com/stablyai/orca) first, and the two do different jobs: Orca runs, shows and paces agents; Hostslot schedules the heavy work the agents start, across the whole machine, and guards memory while it runs. As of Orca 1.4.25x:
+Hostslot is made for Orca first, and the two do different jobs: Orca runs, shows and paces agents; Hostslot schedules what the agents start, across the whole machine. As of Orca 1.4.25x:
 
 | Need | Orca | Hostslot |
 | --- | --- | --- |
@@ -47,23 +57,23 @@ Hostslot is made for [Orca](https://github.com/stablyai/orca) first, and the two
 | Know a command's cost | Not covered | Learns peak memory and duration per repository |
 | Share CPU fairly | Not covered | Lower OS priority and inner parallelism per job |
 | Stop a runaway | Not covered (on Linux, one OOM kill no longer takes every terminal) | Per-job ceiling, out-of-memory stop, cleanup of leftovers |
-| Dev-server ports | Shows listening ports per workspace | Planned: a port leased per worktree |
+| Dev-server ports | Shows listening ports per workspace | Gives each worktree's dev server its own port and tells the agent the URL |
 | Scope | Orca's terminals | The whole machine: any editor or terminal, agent hooks, git hooks, scripts |
 
 ### Compared with similar tools
 
 | | File-lock wrappers | Generic command queues | OS limits (cgroups, Job Objects) | Per-worktree port tools | **Hostslot** |
 | --- | --- | --- | --- | --- | --- |
-| Scope | Commands you wrap | Commands you submit | Processes you put under them | Dev servers you start through them | Everything that runs heavy commands on the machine: agents, editors, terminals, git hooks, scripts |
+| Scope | Commands you wrap | Commands you submit | Processes you put under them | Dev servers you start through them | Everything that runs heavy commands or dev servers on the machine: agents, editors, terminals, git hooks, scripts |
 | Heavy commands wait instead of piling up | Yes, by a fixed count | Yes, by a fixed count | No: capped work fails | — | Yes, admitted by free slots and free memory |
 | Knows what a command costs | No | No | You set the limit | — | Learns peak memory and duration per repository and command |
 | People before agents | No | Manual priorities | No | — | Interactive jobs first; agents at a lower OS priority |
 | Shares CPU inside jobs | No | No | CPU quotas | — | Sets each job's worker count (test runners, workspace concurrency) |
 | Stops a runaway | No | No | At the limit, as an allocation failure | — | Per-job ceiling and out-of-memory stop, with a clear exit code; leftover processes cleaned up |
-| Agents need no new habits | A rule or wrapper to remember | Submit through the queue | Set up per process | A command or env file per worktree | Hooks rewrite the heavy commands in place, pipes and `&&` included |
+| Dev-server ports | — | — | — | A port per worktree | A port per worktree, handed to the tool (Vite included) and told to the agent |
+| Agents need no new habits | A rule or wrapper to remember | Submit through the queue | Set up per process | A command or env file per worktree | Hooks rewrite heavy and dev-server commands in place, pipes and `&&` included |
 | Shows what runs and waits | No | Its own list | No | Ports in use | Status bar and panel in Orca, `hostslot status` |
 | Windows, macOS, Linux | Mostly macOS and Linux | Varies | One OS each | Varies | All three |
-| Dev-server ports | — | — | — | Yes | Planned |
 
 ## How it works
 
@@ -94,7 +104,7 @@ You decide with `hostslot run`. The integrations decide like this:
 
 | Integration | Gated |
 | --- | --- |
-| Agent hooks (Claude Code, Codex) | Each heavy command in the line, rewritten in place (below); the rest of the line runs as written |
+| Agent hooks (Claude Code, Codex) | Each heavy command in the line, rewritten in place (see [Claude Code](#claude-code)); the rest of the line runs as written |
 | git pre-push | The push's `check` script |
 | Package scripts | Whatever you wrap |
 
@@ -106,6 +116,29 @@ A command is heavy when it is one of:
 - `go test|build|vet`, `cargo test|build|check|clippy`
 
 The line is parsed as shell, so text in quotes, heredocs and comments never counts. Installs, git, formatters and prose linters stay ungated and never wait. `hostslot hook claude --match <regex>` (or `hook codex`) replaces the list.
+
+## Dev-server ports
+
+Parallel worktrees, of one repository or several, start the same dev servers on the same default ports, and some (Vite) quietly move to the next one. Hostslot gives each service of each worktree its own port, keeps it, and hands it over:
+
+```sh
+hostslot serve -- pnpm dev          # hostslot: shop on http://localhost:21643 (PORT=21643)
+hostslot serve -- vite --port {port}
+hostslot serve --fixed 3000 -- pnpm dev   # a port that can't move (an OAuth callback): one worktree at a time
+hostslot port web                   # just print the port
+hostslot port --list                # every assigned port, with its worktree
+```
+
+| | |
+| --- | --- |
+| **Service** | The package's name without its scope (`@acme/shop` → `shop`), else its directory; `--name` to choose |
+| **Port** | The tool's default (Vite 5173, Next.js 3000) for the first service that asks while nothing listens on it, and it stays with it. Others get a free port from 20000-29999, starting where the key (repository + worktree + service) points |
+| **Handed over** | `PORT`, `PORT_<NAME>` and `HOSTSLOT_PORT`; `{port}` in the command; for Vite, `--port N --strictPort` appended, also over a port written in the script |
+| **Checked** | When nothing listens on the port after 30 s, it says the app likely ignores `PORT` and how to fix it |
+| **Freed** | When the worktree is removed |
+| **Slots** | None: a dev server runs for hours and doesn't wait for capacity |
+
+Agents' dev-server commands go through `hostslot serve` by themselves: the hooks below rewrite them and tell the agent the URL.
 
 ## What it learns
 
@@ -125,13 +158,10 @@ Each finished job adds a sample to `samples.json` in the data directory. Nothing
 
 This repository is also an Orca plugin (`orca-plugin.json` at the root, code in `apps/orca-plugin`).
 
-<img src="docs/images/orca-panel.png" alt="The Hostslot panel in Orca: memory and slots, running and waiting jobs, a guard stop, recent jobs" width="360">
-
 - **Status bar:** `Hostslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
-- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; recent outcomes, with guard stops called out; jobs by repository; setup checks
-- **Install from the panel:** when Hostslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in Hostslot's data directory and runs `hostslot setup`. When a hook is missing, it offers `hostslot setup` alone. Nothing is downloaded or written before a press
-- It reads `hostslot status --json` every 5 seconds. It finds `hostslot` at `HOSTSLOT_BIN`, in its own `bin`, on Orca's `PATH`, in `~/.local/bin`, `~/go/bin`, WinGet's `Links` or Homebrew's `bin`
-- It only shows; gating comes from the agents' hooks
+- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; jobs a guard stopped; recent outcomes; jobs by repository; setup problems with one button to fix them
+- **Install from the panel:** when Hostslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in Hostslot's data directory and runs `hostslot setup`. Nothing is downloaded or written before a press
+- It reads `hostslot status --json` every 5 seconds and only shows; scheduling comes from the agents' hooks
 - Development: `orca plugin dev load .`, then `orca plugin logs local.hostslot`
 
 ### Claude Code
@@ -144,16 +174,21 @@ hostslot setup --remove   # remove it
 
 `setup` touches only its own entry (other keys keep their order, other tools' hooks stay), and points the hook at a path that survives upgrades when a package manager links one onto the `PATH`.
 
-The hook rewrites only the heavy commands, in place:
+The hook rewrites only heavy and dev-server commands, in place:
 
 ```sh
 cd apps/site && pnpm test 2>&1 | tail -20
 # becomes (abridged; the real prefix also carries --weight, --max-wait and --timeout)
 cd apps/site && '<hostslot>' run --priority background --source claude --as 'pnpm test' -- pnpm test 2>&1 | tail -20
+
+pnpm dev
+# becomes, and Claude is told "`pnpm dev` (shop) on http://localhost:21643 (PORT=21643)"
+'<hostslot>' serve -- pnpm dev
 ```
 
 - A slot is held only while `pnpm test` runs, and `cd` carries over to the agent's next command
 - Waiting doesn't eat into the command's timeout: the hook raises the Bash tool's timeout to 10 minutes, keeps the command's own as `--timeout` and gives the rest to `--max-wait`. Out of time, the call exits `75` so the agent can retry
+- Dev-server commands: package scripts `dev`, `start`, `serve`, `preview` (also `dev:*`), `vite` (not `vite build`), `next dev|start`, `astro dev|preview`, `nuxt dev`, `wrangler dev`, `storybook dev`, and scripts that run one
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it
 - `HOSTSLOT_DISABLE=1` in the environment or the command line turns it off
 
@@ -161,12 +196,12 @@ cd apps/site && '<hostslot>' run --priority background --source claude --as 'pnp
 
 `hostslot setup` also adds a `PreToolUse` hook to `~/.codex/hooks.json` (or `$CODEX_HOME`). Codex runs a new or changed hook only after you trust it: start Codex and review it with `/hooks`.
 
-The hook rewrites heavy commands in place, as for Claude Code; on Windows the prefix is PowerShell (`& '<hostslot>' run … -- pnpm test`). It gates only where it can:
+The hook rewrites heavy and dev-server commands in place, as for Claude Code; on Windows the prefix is PowerShell (`& '<hostslot>' run … -- pnpm test`). It works only where it can:
 
 | Codex session | What happens |
 | --- | --- |
-| No approvals, no sandbox (full access, `--dangerously-bypass-approvals-and-sandbox`) | Gated |
-| No approvals, in the sandbox | Rewritten, but the sandbox keeps Hostslot from its daemon (on Windows it is another user), so the command runs ungated |
+| No approvals, no sandbox (full access, `--dangerously-bypass-approvals-and-sandbox`) | Scheduled |
+| No approvals, in the sandbox | Rewritten, but the sandbox keeps Hostslot from its daemon (on Windows it is another user), so the command runs unscheduled |
 | With approvals | Left alone: Codex applies a rewrite only with an "allow" decision, which may skip your approval |
 
 ### git pre-push
@@ -181,31 +216,10 @@ The shared `pre-push` of [`@ryusenkei/conventions`](https://www.npmjs.com/packag
 ### Package scripts
 
 ```json
-{ "scripts": { "test": "hostslot run -- vitest run" } }
+{ "scripts": { "test": "hostslot run -- vitest run", "dev": "hostslot serve -- vite" } }
 ```
 
 Where Hostslot is installed but not wanted (CI), set `HOSTSLOT_DISABLE=1`.
-
-## Dev-server ports
-
-Parallel worktrees, of one repository or several, start the same dev servers on the same default ports, and some (Vite) quietly move to the next one, so agents and tests reach another worktree's server. Hostslot gives each service of each worktree its own port, keeps it, and hands it over:
-
-```sh
-hostslot serve -- pnpm dev          # hostslot: shop on http://localhost:21643 (PORT=21643)
-hostslot serve -- vite --port {port}
-hostslot serve --fixed 3000 -- pnpm dev   # a port that can't move (an OAuth callback): one worktree at a time
-hostslot port web                   # just print the port
-hostslot port --list                # every assigned port, with its worktree
-```
-
-| | |
-| --- | --- |
-| **Service** | The package's name without its scope (`@acme/shop` → `shop`), else its directory; `--name` to choose |
-| **Port** | The tool's default (Vite 5173, Next.js 3000) for the first service that asks while nothing listens on it, and it stays with it. Others get a free port from 20000-29999, starting where the key (repository + worktree + service) points |
-| **Handed over** | `PORT`, `PORT_<NAME>` and `HOSTSLOT_PORT`; `{port}` in the command; for Vite, `--port N --strictPort` appended, also over a port written in the script |
-| **Checked** | When nothing listens on the port after 30 s, it says the app likely ignores `PORT` and how to fix it |
-| **Freed** | When the worktree is removed |
-| **Slots** | None: a dev server runs for hours and doesn't wait for capacity |
 
 ## Reference
 
@@ -279,7 +293,7 @@ Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 
 | Path | Purpose |
 | --- | --- |
-| `cmd/hostslot` | CLI |
+| `cmd/hostslot` | CLI, one file per command |
 | `internal/gate` | Scheduler core, OS-independent and pure: slots, admission, priority, estimates |
 | `internal/platform` | OS ports: memory, process tracking, IPC, locks, paths (one file per OS) |
 | `internal/daemon` | Daemon and client over IPC |
