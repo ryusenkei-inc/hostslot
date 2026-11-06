@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { install, installedPath, offer, setupItems } from './install.ts';
+import { dataDir, install, installedPath, offer, setupItems } from './install.ts';
 import { type Item, type PortEntry, type Problem, type Status, summarize, unavailable } from './status.ts';
 import { older } from './version.ts';
 import { type ActionResult, type Setup, type View, view } from './view.ts';
@@ -27,6 +27,18 @@ const TIMEOUT_MS = 3000;
 // minute, and whenever the binary changes.
 const DOCTOR_EVERY = 12;
 const SETUP_MS = 15_000;
+
+/**
+ * A made-up status to show instead of the live one, for screenshots of the
+ * panel: `panel-fixture.json` in Hostslot's data directory, while it exists.
+ */
+function readFixture(): Status | undefined {
+  try {
+    return JSON.parse(readFileSync(join(dataDir(), 'panel-fixture.json'), 'utf8')) as Status;
+  } catch {
+    return undefined;
+  }
+}
 
 /** This plugin's version, from the manifest at the repository root. */
 function pluginVersion(): string {
@@ -183,8 +195,12 @@ export default function activate(orca: OrcaWorkerApi): void {
   );
 
   const refresh = async () => {
-    last = await status();
-    if (last && found) {
+    const fixture = readFixture();
+    last = fixture ?? (await status());
+    if (fixture) {
+      problems = [];
+      checks = 5;
+    } else if (last && found) {
       // Hostslot before 0.10 has no port list; the panel then shows none.
       last.ports = await run(found, ['port', '--list', '--json'])
         .then((out) => JSON.parse(out) as PortEntry[])
@@ -193,7 +209,7 @@ export default function activate(orca: OrcaWorkerApi): void {
     }
     const next = last ? `using ${found} (${last.mode} ${last.version ?? ''})`.trim() : `hostslot unavailable: ${reason || 'not found'}`;
     if (next !== state) orca.log((state = next));
-    if (found && (found !== checkedFile || polls % DOCTOR_EVERY === 0)) {
+    if (!fixture && found && (found !== checkedFile || polls % DOCTOR_EVERY === 0)) {
       ({ problems, checks, binary } = await checkSetup(found, plugin));
       checkedFile = found;
     }
