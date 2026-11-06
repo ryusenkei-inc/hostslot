@@ -186,6 +186,25 @@ The shared `pre-push` of [`@ryusenkei/conventions`](https://www.npmjs.com/packag
 
 Where Hostslot is installed but not wanted (CI), set `HOSTSLOT_DISABLE=1`.
 
+## Dev-server ports
+
+Parallel worktrees, of one repository or several, start the same dev servers on the same default ports. Hostslot gives each service of each worktree its own port, and keeps it:
+
+```sh
+hostslot port --default 5173 web   # 5173 for the first worktree that asks, a port from 20000-29999 for the others
+PORT=$(hostslot port web) pnpm dev
+hostslot port --list               # every assigned port, with its worktree
+```
+
+| | |
+| --- | --- |
+| **Key** | Repository + worktree + service name, like learned costs |
+| **Default port** | Goes to the first service that asks while nothing listens on it, and stays with it |
+| **Others** | A free port from 20000-29999, starting where the key points, so it rarely changes |
+| **Freed** | When the worktree is removed |
+
+Planned (#71): `hostslot serve` hands the port to the dev server (`PORT`, `{port}`, flags for tools such as Vite), reports the port it actually listens on, and dev-server commands of agents go through it.
+
 ## Reference
 
 ### Commands
@@ -196,6 +215,8 @@ Where Hostslot is installed but not wanted (CI), set `HOSTSLOT_DISABLE=1`.
 | `hostslot status [--json]` | Slots, memory, room for more, running, waiting and recent jobs. `--json` adds held memory, wait reasons and typical durations |
 | `hostslot setup [claude\|codex] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds, and retire an older daemon |
 | `hostslot doctor [--json]` | Check the binary, the `PATH`, the daemon and the hooks, with how to fix each problem; exits 1 on warnings |
+| `hostslot port [--default PORT] [--json] <name>` | Print the port of a dev server of this worktree, assigning one on first use |
+| `hostslot port --list [--json]` | Every assigned port, with its service and worktree |
 | `hostslot hook claude\|codex [--weight N] [--match REGEX]` | The hook of Claude Code or Codex (registered by `setup`) |
 | `hostslot daemon [--idle 10m]` | Run the daemon in the foreground (not needed normally) |
 | `hostslot version` | Print the version |
@@ -232,7 +253,7 @@ Optional `config.json` in the data directory, reread every second:
 | `HOSTSLOT_SOURCE` | Default `--source` |
 | `HOSTSLOT_HOME` | Data directory; separate homes don't share slots |
 
-Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Library/Application Support/hostslot` (macOS), `%LOCALAPPDATA%\hostslot` (Windows). It holds `config.json`, `samples.json` and `daemon.log`.
+Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Library/Application Support/hostslot` (macOS), `%LOCALAPPDATA%\hostslot` (Windows). It holds `config.json`, `samples.json`, `ports.json` and `daemon.log`.
 
 ### OS support
 
@@ -263,6 +284,7 @@ Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 | `internal/store`, `internal/jobkey` | Learned samples and their keys |
 | `internal/config` | `config.json` and environment overrides |
 | `internal/hook`, `internal/setup` | Agent hooks and their registration |
+| `internal/ports` | Dev-server ports assigned per worktree |
 | `apps/orca-plugin` | Orca plugin (TypeScript, no runtime dependencies) |
 | `scripts/` | Repository operations |
 

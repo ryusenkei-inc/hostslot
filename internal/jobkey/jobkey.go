@@ -24,6 +24,17 @@ func For(dir, label string) string {
 	return "dir:" + filepath.ToSlash(canonical(dir)) + "\n" + label
 }
 
+// Worktree returns the repository (its common git directory) and the top
+// directory of the worktree that contains dir, or ok false outside a
+// repository. Paths are canonical and use forward slashes.
+func Worktree(dir string) (common, top string, ok bool) {
+	common, top, ok = repository(filepath.Clean(dir))
+	if !ok {
+		return "", "", false
+	}
+	return filepath.ToSlash(canonical(common)), filepath.ToSlash(canonical(top)), true
+}
+
 // canonical resolves symlinks and, on Windows, short (8.3) names: git writes
 // the resolved path into a linked worktree's `.git` file, while the main
 // worktree is reached through whatever path the shell used (/var vs
