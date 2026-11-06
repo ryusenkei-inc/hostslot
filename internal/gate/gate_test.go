@@ -81,12 +81,17 @@ func TestAdmitChecksFreeMemory(t *testing.T) {
 	if got := s.Admit(t0, 500); len(got) != 1 {
 		t.Fatalf("first admit %d, want 1", len(got))
 	}
-	// The second must wait: 1500 free minus 1000 warming leaves 500 < 1000.
-	if got := s.Admit(t0.Add(time.Second), 1500); len(got) != 0 {
+	// The second must wait: 2500 free minus 1000 warming and the 1000
+	// reserve leaves 500 < 1000.
+	if got := s.Admit(t0.Add(time.Second), 2500); len(got) != 0 {
 		t.Fatalf("admitted during warmup with low memory")
 	}
-	// After warmup, the reading already includes the first job.
-	if got := s.Admit(t0.Add(time.Minute), 1500); len(got) != 1 {
+	// After warmup, the reading already includes the first job; the reserve
+	// still stays free.
+	if got := s.Admit(t0.Add(time.Minute), 1500); len(got) != 0 {
+		t.Fatalf("admitted into the reserve")
+	}
+	if got := s.Admit(t0.Add(time.Minute), 2000); len(got) != 1 {
 		t.Fatalf("not admitted after warmup")
 	}
 }
@@ -141,14 +146,15 @@ func TestAdmitHoldsHeadroomOfGrowingLearnedJobs(t *testing.T) {
 	}
 	s.Enqueue(Request{Command: "b", Weight: 1}, t0)
 	// Past the warmup, the learned job reports 400 MB of its 2400 MB peak:
-	// 2000 MB may still come, so 2500 free leaves too little for 1000.
+	// 2000 MB may still come, so 3500 free leaves too little for 1000 and
+	// the 1000 reserve.
 	s.Report(a.ID, 400)
-	if got := s.Admit(t0.Add(time.Minute), 2500); len(got) != 0 {
+	if got := s.Admit(t0.Add(time.Minute), 3500); len(got) != 0 {
 		t.Fatalf("admitted next to a job that is still growing")
 	}
 	// Once it has grown, its memory is in the reading.
 	s.Report(a.ID, 2300)
-	if got := s.Admit(t0.Add(2*time.Minute), 1200); len(got) != 1 {
+	if got := s.Admit(t0.Add(2*time.Minute), 2200); len(got) != 1 {
 		t.Fatalf("not admitted after the job reached its peak")
 	}
 }
@@ -213,8 +219,9 @@ func TestRoom(t *testing.T) {
 	}
 	s.Enqueue(Request{Command: "a", Weight: 1}, t0)
 	s.Admit(t0, 100000)
-	// One job warming up holds its 1000 MB estimate: 2500 free leaves 1 more.
-	if got := s.Room(t0.Add(time.Second), 2500); got != 1 {
+	// One job warming up holds its 1000 MB estimate and the reserve keeps
+	// 1000 MB: 3500 free leaves 1 more.
+	if got := s.Room(t0.Add(time.Second), 3500); got != 1 {
 		t.Fatalf("by memory: %d", got)
 	}
 	if got := s.Room(t0.Add(time.Second), 100000); got != 3 {

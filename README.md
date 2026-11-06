@@ -54,7 +54,7 @@ The OS's own tools don't queue: cgroups and Job Object limits make a capped buil
 | | |
 | --- | --- |
 | **Slots** | `floor((total memory x 0.6 - reserve) / 2 GB)`, at most the CPU count: 4 on a 16 GB machine |
-| **Admission** | A job needs free slots for its weight and free memory for its estimate. Running jobs that are still growing hold back the rest of their estimate. When nothing runs, the next job always starts |
+| **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents. Running jobs that are still growing hold back the rest of their estimate. When nothing runs, the next job always starts |
 | **Order** | Interactive jobs (a person at a terminal) before background jobs (agents, scripts), first come first served; the head of the queue blocks later jobs, so a heavy job is never starved |
 | **Learning** | Each command's peak memory and duration, per repository (see [What it learns](#what-it-learns)) |
 | **CPU share** | Background jobs run at a lower OS priority. Each job gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency`, `pnpm_config_workspace_concurrency` and `LOADSLOT_WORKERS` (not under `CI`, never overriding a set value) |
