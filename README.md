@@ -57,7 +57,7 @@ loadslot status [--json]
 loadslot daemon [--idle 10m]
 loadslot hook claude [--weight N] [--match REGEX]
 loadslot setup [claude] [--remove] [--dry-run] [--settings PATH]
-loadslot doctor
+loadslot doctor [--json]
 loadslot version
 ```
 
@@ -72,17 +72,17 @@ loadslot version
 - Memory ceiling: a job whose process tree uses more than `jobCeilingFraction` of total memory (default 75%) is stopped as a runaway, with exit `77` and a message naming the ceiling. `--max-memory 6000` sets it for one run in MB; `jobCeilingFraction` of 1 or more turns it off. The stopped run's peak is still learned, so the next run is admitted with room for it.
 - `--source claude` names who started the job (default: `$LOADSLOT_SOURCE`), shown in `status`. The job also records `ORCA_PANE_KEY`, `ORCA_TAB_ID` and `ORCA_WORKTREE_ID` when set, so `status --json` tells which Orca pane a job belongs to.
 - Ctrl+C reaches the command as usual, and loadslot waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
-- `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held.
+- `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held. `room` (in the text and `--json`) is how many more weight-1 jobs would start now: the free slots, limited by free memory after what running jobs may still grow to, and 0 while any job waits.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
 - `hook claude` is a Claude Code hook. `setup` registers it for every agent it finds, or for the one named (see [Claude Code](#claude-code)).
-- `doctor` checks the binary, whether `loadslot` on the `PATH` is the same file, the daemon (running, version), and each agent's hook (registered, pointing at an existing loadslot), and tells how to fix each problem. It exits 1 on warnings or errors.
+- `doctor` checks the binary, whether `loadslot` on the `PATH` is the same file, the daemon (running, version), and each agent's hook (registered, pointing at an existing loadslot), and tells how to fix each problem. It exits 1 on warnings or errors. `--json` prints the checks as `[{"level", "text"}]` for integrations.
 
 Example:
 
 ```text
 $ loadslot status
 mode:    daemon pid 17048
-slots:   1/1 used
+slots:   1/1 used, room for 0 more
 memory:  4396 MB free of 16325 MB
 cpus:    8
 tracker: job object (peak committed memory)

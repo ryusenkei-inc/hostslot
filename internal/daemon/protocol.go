@@ -57,4 +57,7 @@ type Status struct {
 	CPUs     int                   `json:"cpus"`
 	Tracker  platform.Capabilities `json:"tracker"`
 	Snapshot gate.Snapshot         `json:"snapshot"`
+	// Room is how many more weight-1 jobs would start now (see
+	// gate.Scheduler.Room); without a daemon, the free slots.
+	Room int `json:"room"`
 }

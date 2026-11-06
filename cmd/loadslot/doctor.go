@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -14,15 +16,16 @@ import (
 
 // check is one line of `loadslot doctor`.
 type check struct {
-	level string // ok, info, warn, error
-	text  string
+	Level string `json:"level"` // ok, info, warn, error
+	Text  string `json:"text"`
 }
 
 // cmdDoctor reports whether loadslot is installed and wired up, with the fix
 // for each problem. It exits 1 when there are warnings or errors.
 func cmdDoctor(args []string) int {
-	if len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "loadslot doctor: takes no arguments")
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print the checks as JSON (for integrations such as the Orca plugin)")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	exe, err := os.Executable()
@@ -46,6 +49,18 @@ func cmdDoctor(args []string) int {
 	}
 	if os.Getenv("LOADSLOT_DISABLE") == "1" {
 		checks = append(checks, check{"warn", "LOADSLOT_DISABLE=1 is set: commands run without the gate"})
+	}
+	if *asJSON {
+		code := 0
+		for _, c := range checks {
+			if c.Level == "warn" || c.Level == "error" {
+				code = 1
+			}
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(checks)
+		return code
 	}
 	return printChecks(os.Stdout, checks)
 }
@@ -116,8 +131,8 @@ func sameFile(a, b string) bool {
 func printChecks(w io.Writer, checks []check) int {
 	code := 0
 	for _, c := range checks {
-		fmt.Fprintf(w, "%-5s  %s\n", c.level, c.text)
-		if c.level == "warn" || c.level == "error" {
+		fmt.Fprintf(w, "%-5s  %s\n", c.Level, c.Text)
+		if c.Level == "warn" || c.Level == "error" {
 			code = 1
 		}
 	}

@@ -204,3 +204,23 @@ func TestCeiling(t *testing.T) {
 		t.Fatalf("off: %d", got)
 	}
 }
+
+func TestRoom(t *testing.T) {
+	s := New(cfg(), 4, nil)
+	if got := s.Room(t0, 100000); got != 4 {
+		t.Fatalf("idle: %d", got)
+	}
+	s.Enqueue(Request{Command: "a", Weight: 1}, t0)
+	s.Admit(t0, 100000)
+	// One job warming up holds its 1000 MB estimate: 2500 free leaves 1 more.
+	if got := s.Room(t0.Add(time.Second), 2500); got != 1 {
+		t.Fatalf("by memory: %d", got)
+	}
+	if got := s.Room(t0.Add(time.Second), 100000); got != 3 {
+		t.Fatalf("by slots: %d", got)
+	}
+	s.Enqueue(Request{Command: "b", Weight: 9}, t0)
+	if got := s.Room(t0, 100000); got != 0 {
+		t.Fatalf("with a job waiting: %d", got)
+	}
+}

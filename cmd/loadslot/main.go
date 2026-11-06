@@ -376,6 +376,7 @@ func fallbackStatus(p *platform.Platform) (*daemon.Status, error) {
 		CPUs:     cpus,
 		Tracker:  p.Tracker.Capabilities(),
 		Snapshot: gate.Snapshot{Slots: slots, Used: used, Running: []gate.Job{}, Waiting: []gate.Job{}},
+		Room:     slots - used,
 	}, nil
 }
 
@@ -388,7 +389,7 @@ func printStatus(w io.Writer, s *daemon.Status) {
 		mode += " " + s.Version
 	}
 	fmt.Fprintf(w, "mode:    %s\n", mode)
-	fmt.Fprintf(w, "slots:   %d/%d used\n", s.Snapshot.Used, s.Snapshot.Slots)
+	fmt.Fprintf(w, "slots:   %d/%d used, room for %d more\n", s.Snapshot.Used, s.Snapshot.Slots, s.Room)
 	fmt.Fprintf(w, "memory:  %d MB free of %d MB\n", s.Memory.FreeMB, s.Memory.TotalMB)
 	fmt.Fprintf(w, "cpus:    %d\n", s.CPUs)
 	fmt.Fprintf(w, "tracker: %s\n", s.Tracker.Method)
