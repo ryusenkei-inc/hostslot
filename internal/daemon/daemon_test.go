@@ -248,6 +248,17 @@ func TestStatusListsRecentJobsWithTheirOutcome(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 	c.Close()
+	// The daemon notices the closed connection on its own schedule; wait for
+	// that record so the two land in a known order.
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		if s, err := QueryStatus(p); err == nil && len(s.Recent) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the job that gave up was not recorded")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	l.Release(&store.Sample{PeakMB: 300, DurationMS: 1500, Outcome: "timeout"})
 
 	deadline := time.Now().Add(5 * time.Second)
