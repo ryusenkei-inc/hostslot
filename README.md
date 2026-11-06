@@ -184,9 +184,12 @@ Limitations:
 | `internal/daemon` | Daemon and client: admission over IPC, started on demand | `internal/gate`, `internal/platform`, `internal/store` |
 | `internal/hook` | Agent hooks: rewrite heavy commands to `jobgate run`, text only | — |
 | `internal/runner` | `jobgate run`: acquire (daemon or lock fallback), run, release, record | all of the above |
+| `apps/` | TypeScript packages in a pnpm workspace, such as the Orca plugin (`apps/orca-plugin`) | the `jobgate` CLI |
 | `scripts/` | Repository operations, such as managing `.env` | — |
 
-Node.js is only used for dev tooling: [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) (shared rules, Claude Code hooks and shared files such as `.editorconfig`, `.gitignore` and `.github/dependabot.yaml`; don't edit them by hand) and [`@ryusenkei/prose-lint`](https://www.npmjs.com/package/@ryusenkei/prose-lint) (Markdown, comments and commit messages).
+The Go module stays at the repository root, so `go install github.com/ryusenkei-inc/jobgate/cmd/jobgate@latest` and `v*` tags work as for any Go tool. TypeScript packages live in `apps/` and have no runtime dependencies on each other or on the Go code; they call the `jobgate` CLI.
+
+Dev tooling: [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) (shared rules, Claude Code hooks and shared files such as `.editorconfig`, `.gitignore` and `.github/dependabot.yaml`; don't edit them by hand) and [`@ryusenkei/prose-lint`](https://www.npmjs.com/package/@ryusenkei/prose-lint) (Markdown, comments and commit messages).
 
 ## Commands
 
@@ -194,8 +197,8 @@ Node.js is only used for dev tooling: [`@ryusenkei/conventions`](https://www.npm
 go build ./cmd/jobgate         # build the CLI
 go test ./...                  # tests
 pnpm install                   # dev tooling and the commit-msg hook
-pnpm lint                      # typecheck of scripts/, prose-lint, shared-file check, go vet
-pnpm test                      # go test ./...
+pnpm lint                      # typecheck (scripts/, apps/*), prose-lint, shared-file check, go vet
+pnpm test                      # go test ./... and Vitest
 pnpm check                     # lint and test (run by the pre-push hook, through jobgate when installed)
 npx ryusenkei-conventions sync # write the shared files from @ryusenkei/conventions
 node scripts/env.ts run <cmd>  # run a command with .env loaded
@@ -203,7 +206,7 @@ pnpm env:push [--dry-run]      # push .env values to GitHub Variables / Secrets
 pnpm repo:settings             # apply GitHub repository settings (squash merge only)
 ```
 
-CI (`.github/workflows/ci.yaml`) runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles for all three, and checks prose, the PR title and secrets.
+CI (`.github/workflows/ci.yaml`) runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles for all three, and runs the TypeScript typecheck and Vitest, prose, PR title and secret checks.
 
 ## License
 

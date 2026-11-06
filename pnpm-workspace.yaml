@@ -1,4 +1,6 @@
-# Node.js is dev tooling only (prose-lint, shared conventions, scripts/); the product is the Go module
+# Go module at the root (the CLI); TypeScript packages in apps/* (the Orca plugin)
+packages:
+  - apps/*
 
 # Skip versions published less than 2 days ago (same as `cooldown` in `.github/dependabot.yaml`)
 minimumReleaseAge: 2880
