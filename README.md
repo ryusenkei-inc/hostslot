@@ -35,20 +35,35 @@ Several agents, each in its own worktree, start `tsc`, test suites and builds at
 
 The OS's own tools don't queue: cgroups and Job Object limits make a capped build fail instead of wait, early-OOM killers act after memory is gone, and the scheduler has no notion of jobs worth waiting for. Hostslot uses those mechanisms and adds a queue, priorities and learned costs.
 
-### Compared with other approaches
+### Hostslot and Orca
 
-| | Agent orchestrators' built-in limits | File-lock wrappers | Generic command queues | OS limits (cgroups, Job Objects) | Per-worktree port tools | **Hostslot** |
-| --- | --- | --- | --- | --- | --- | --- |
-| Scope | Their own agents and terminals | Commands you wrap | Commands you submit | Processes you put under them | Dev servers you start through them | Everything that runs heavy commands on the machine: agents, editors, terminals, git hooks, scripts |
-| Heavy commands wait instead of piling up | Agents are paced; their commands all start | Yes, by a fixed count | Yes, by a fixed count | No: capped work fails | — | Yes, admitted by free slots and free memory |
-| Knows what a command costs | No | No | No | You set the limit | — | Learns peak memory and duration per repository and command |
-| People before agents | No | No | Manual priorities | No | — | Interactive jobs first; agents at a lower OS priority |
-| Shares CPU inside jobs | No | No | No | CPU quotas | — | Sets each job's worker count (test runners, workspace concurrency) |
-| Stops a runaway | By hand | No | No | At the limit, as an allocation failure | — | Per-job ceiling and out-of-memory stop, with a clear exit code; leftover processes cleaned up |
-| Agents need no new habits | Built in | A rule or wrapper to remember | Submit through the queue | Set up per process | A command or env file per worktree | Hooks rewrite the heavy commands in place, pipes and `&&` included |
-| Shows what runs and waits | Per agent | No | Its own list | No | Ports in use | Status bar and panel in the agent IDE, `hostslot status` |
-| Windows, macOS, Linux | Depends | Mostly macOS and Linux | Varies | One OS each | Varies | All three |
-| Dev-server ports | Some assign a port range per workspace | — | — | — | Yes | Planned |
+Hostslot is made for [Orca](https://github.com/stablyai/orca) first, and the two do different jobs: Orca runs, shows and paces agents; Hostslot schedules the heavy work the agents start, across the whole machine, and guards memory while it runs. As of Orca 1.4.25x:
+
+| Need | Orca | Hostslot |
+| --- | --- | --- |
+| See memory use | Resource Manager: per-session CPU and memory, kill a session by hand | Per-job memory, held memory, why jobs wait, recent outcomes |
+| Limit agents | Orchestration runs 4 tasks at a time by default; restores pause when the process count grows fast | Advisory room for more work; agents are not gated |
+| Keep heavy commands from piling up | Not covered | Admits each when slots and memory allow; the rest queue by priority |
+| Know a command's cost | Not covered | Learns peak memory and duration per repository |
+| Share CPU fairly | Not covered | Lower OS priority and inner parallelism per job |
+| Stop a runaway | Not covered (on Linux, one OOM kill no longer takes every terminal) | Per-job ceiling, out-of-memory stop, cleanup of leftovers |
+| Dev-server ports | Shows listening ports per workspace | Planned: a port leased per worktree |
+| Scope | Orca's terminals | The whole machine: any editor or terminal, agent hooks, git hooks, scripts |
+
+### Compared with similar tools
+
+| | File-lock wrappers | Generic command queues | OS limits (cgroups, Job Objects) | Per-worktree port tools | **Hostslot** |
+| --- | --- | --- | --- | --- | --- |
+| Scope | Commands you wrap | Commands you submit | Processes you put under them | Dev servers you start through them | Everything that runs heavy commands on the machine: agents, editors, terminals, git hooks, scripts |
+| Heavy commands wait instead of piling up | Yes, by a fixed count | Yes, by a fixed count | No: capped work fails | — | Yes, admitted by free slots and free memory |
+| Knows what a command costs | No | No | You set the limit | — | Learns peak memory and duration per repository and command |
+| People before agents | No | Manual priorities | No | — | Interactive jobs first; agents at a lower OS priority |
+| Shares CPU inside jobs | No | No | CPU quotas | — | Sets each job's worker count (test runners, workspace concurrency) |
+| Stops a runaway | No | No | At the limit, as an allocation failure | — | Per-job ceiling and out-of-memory stop, with a clear exit code; leftover processes cleaned up |
+| Agents need no new habits | A rule or wrapper to remember | Submit through the queue | Set up per process | A command or env file per worktree | Hooks rewrite the heavy commands in place, pipes and `&&` included |
+| Shows what runs and waits | No | Its own list | No | Ports in use | Status bar and panel in Orca, `hostslot status` |
+| Windows, macOS, Linux | Mostly macOS and Linux | Varies | One OS each | Varies | All three |
+| Dev-server ports | — | — | — | Yes | Planned |
 
 ## How it works
 
