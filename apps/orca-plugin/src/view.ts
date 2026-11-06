@@ -51,6 +51,18 @@ export type RecentRow = {
   ended: number;
 };
 
+/** What the panel offers to fix; the worker acts only when the person presses its button. */
+export type Offer = {
+  /** Download loadslot `version` to `to` and run its setup; `update` when an older one is there. */
+  install?: { version: string; to: string; update: boolean };
+  /** Register the agents' hooks (`loadslot setup`). */
+  setup?: boolean;
+  /** What the worker is doing now. */
+  progress?: string;
+  /** How the last install or setup went. */
+  result?: { ok: boolean; text: string };
+};
+
 /** Everything the panel draws; plain JSON, as it crosses from the worker. */
 export type View = {
   headline: string;
@@ -69,6 +81,7 @@ export type View = {
   problems: Problem[];
   /** How many setup checks ran (0 before the first `doctor`). */
   checks: number;
+  offer?: Offer;
 };
 
 const installLink = 'https://github.com/ryusenkei-inc/loadslot#install';

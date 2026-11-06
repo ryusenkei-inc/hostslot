@@ -4,6 +4,7 @@
 import {
   atom,
   Badge,
+  Button,
   Callout,
   Collapsible,
   EmptyState,
@@ -149,6 +150,44 @@ function Repos({ v }: { v: View }) {
   );
 }
 
+// Nothing is downloaded or written until the person presses a button; the
+// text says what it downloads, from where, and where it goes.
+function Offer({ v }: { v: View }) {
+  const o = v.offer;
+  if (!o) return null;
+  const busy = Boolean(o.progress);
+  return (
+    <Stack gap="sm">
+      {o.install ? (
+        <Stack gap="sm">
+          <Button variant="solid" tone="accent" disabled={busy} onPress={() => void plugin.request('install', {})}>
+            {o.install.update ? `Update loadslot to ${o.install.version}` : `Install loadslot ${o.install.version}`}
+          </Button>
+          <Text size="sm" muted>
+            Downloads it from the loadslot releases on GitHub to {o.install.to}, checks its SHA-256, then runs loadslot
+            setup to register the hooks of the agents installed here.
+          </Text>
+        </Stack>
+      ) : null}
+      {o.setup && !o.install ? (
+        <Button variant="outline" disabled={busy} onPress={() => void plugin.request('setup', {})}>
+          Run loadslot setup
+        </Button>
+      ) : null}
+      {o.progress ? (
+        <Text size="sm" muted>
+          {o.progress}
+        </Text>
+      ) : null}
+      {o.result ? (
+        <Callout tone={o.result.ok ? 'success' : 'danger'} title={o.result.ok ? 'Done' : 'Could not finish'}>
+          <Text size="sm">{o.result.text}</Text>
+        </Callout>
+      ) : null}
+    </Stack>
+  );
+}
+
 function Setup({ v }: { v: View }) {
   if (v.problems.length > 0) {
     return (
@@ -179,6 +218,7 @@ export default function Panel() {
           <Text muted>{v.problem.detail}</Text>
           <Link href={v.problem.link}>How to install loadslot</Link>
         </Callout>
+        <Offer v={v} />
       </Stack>
     );
   }
@@ -194,6 +234,7 @@ export default function Panel() {
       <Waiting v={v} />
       <Recent v={v} />
       <Repos v={v} />
+      <Offer v={v} />
       <Setup v={v} />
     </Stack>
   );

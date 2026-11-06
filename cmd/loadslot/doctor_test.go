@@ -39,10 +39,10 @@ func TestHookCheck(t *testing.T) {
 
 func TestPrintChecksExitCode(t *testing.T) {
 	var b bytes.Buffer
-	if code := printChecks(&b, []check{{"ok", "a"}, {"info", "b"}}); code != 0 {
+	if code := printChecks(&b, []check{{Level: "ok", Text: "a"}, {Level: "info", Text: "b"}}); code != 0 {
 		t.Fatalf("ok and info gave %d", code)
 	}
-	if code := printChecks(&b, []check{{"ok", "a"}, {"warn", "b"}}); code != 1 {
+	if code := printChecks(&b, []check{{Level: "ok", Text: "a"}, {Level: "warn", Text: "b"}}); code != 1 {
 		t.Fatalf("warn gave %d", code)
 	}
 	if !strings.Contains(b.String(), "warn   b") {
@@ -51,8 +51,8 @@ func TestPrintChecksExitCode(t *testing.T) {
 }
 
 func TestChecksMarshalForIntegrations(t *testing.T) {
-	b, err := json.Marshal([]check{{"warn", "x"}})
-	if err != nil || string(b) != `[{"level":"warn","text":"x"}]` {
+	b, err := json.Marshal([]check{{Level: "warn", Text: "x"}, {Level: "warn", Text: "y", Fix: "setup"}})
+	if err != nil || string(b) != `[{"level":"warn","text":"x"},{"level":"warn","text":"y","fix":"setup"}]` {
 		t.Fatalf("%s %v", b, err)
 	}
 }
