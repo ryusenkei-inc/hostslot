@@ -4,7 +4,7 @@
   "execution": "trusted-worker",
   "id": "loadslot",
   "name": "loadslot",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Machine capacity for parallel agents: how many heavy commands run and wait, and how much memory is free, from loadslot.",
   "license": "MIT",
   "engines": {
