@@ -45,8 +45,8 @@ jobgate run [--weight N] [--priority interactive|background] [--as LABEL] [--sou
             [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
 jobgate status [--json]
 jobgate daemon [--idle 10m]
-jobgate hook claude [--weight N] [--match REGEX]
-jobgate setup claude [--remove] [--dry-run] [--settings PATH]
+jobgate hook claude|codex [--weight N] [--match REGEX]
+jobgate setup claude|codex [--remove] [--dry-run] [--settings PATH]
 jobgate version
 ```
 
@@ -60,7 +60,7 @@ jobgate version
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
-- `hook claude` is a Claude Code hook, and `setup claude` registers it (see [Claude Code](#claude-code)).
+- `hook claude` and `hook codex` are agent hooks, and `setup` registers them (see [Claude Code](#claude-code) and [Codex](#codex)).
 
 Example:
 
@@ -115,6 +115,20 @@ jobgate setup claude --remove   # remove it
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it.
 
 Waiting for a slot doesn't eat into the command's own timeout. The hook raises the Bash tool's timeout to its maximum (10 minutes), keeps the command's timeout (as asked, or the 2-minute default, at most 9 minutes) as `--timeout`, and gives the rest to `--max-wait`. When no slot frees up in time, the call fails with exit `75` and a message, so the agent can retry. Background calls (`run_in_background`) wait without a limit.
+
+### Codex
+
+`jobgate hook codex` is the same hook for Codex (0.152 or later):
+
+```sh
+jobgate setup codex   # add or update the hook in ~/.codex/hooks.json ($CODEX_HOME)
+```
+
+Codex runs a new or changed hook only after you trust it: start Codex and review it when asked, or run `/hooks`. `setup` appends its entry after existing groups, so other tools' hooks keep their position, which their trust depends on.
+
+- Codex applies a rewritten command only together with an "allow" decision, which also skips its own approval of that call. The hook therefore rewrites only in sessions that never ask for approval (`approval_policy = "never"`, reported to hooks as `bypassPermissions`). In other sessions it leaves commands alone rather than approve them on your behalf.
+- Heavy commands are detected as for Claude Code. On Windows, Codex runs commands in PowerShell, so the original line runs as `pwsh -NoProfile -NonInteractive -EncodedCommand <line>` (Windows PowerShell when `pwsh` is missing), which needs no quoting. On Linux and macOS it runs with `sh -c`.
+- Codex returns long-running commands to the model while they keep running, so the hook sets no `--max-wait` or `--timeout`.
 
 ### git pre-push
 
@@ -204,7 +218,7 @@ Limitations:
 | `internal/jobkey` | Learning keys: repository (across worktrees), path inside it, label | — |
 | `internal/config` | `config.json` and environment overrides | `internal/gate` |
 | `internal/daemon` | Daemon and client: admission over IPC, started on demand | `internal/gate`, `internal/platform`, `internal/store` |
-| `internal/hook` | Agent hooks: rewrite heavy commands to `jobgate run`, text only | — |
+| `internal/hook` | Agent hooks (Claude Code, Codex): rewrite heavy commands to `jobgate run`, text only | — |
 | `internal/setup` | Register agent hooks in the agents' settings files, keeping other entries and key order | — |
 | `internal/runner` | `jobgate run`: acquire (daemon or lock fallback), run, release, record | all of the above |
 | `apps/` | TypeScript packages in a pnpm workspace, such as the Orca plugin (`apps/orca-plugin`) | the `jobgate` CLI |

@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -33,8 +35,8 @@ Usage:
               [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
   jobgate status [--json]
   jobgate daemon
-  jobgate hook claude [--weight N] [--match REGEX]
-  jobgate setup claude [--remove] [--dry-run] [--settings PATH]
+  jobgate hook claude|codex [--weight N] [--match REGEX]
+  jobgate setup claude|codex [--remove] [--dry-run] [--settings PATH]
   jobgate version
 
 Environment:
@@ -166,14 +168,16 @@ func resolvePriority(flagValue string) (gate.Priority, error) {
 	return p, nil
 }
 
-// cmdHook exits 1 on errors: Claude Code reports exit 1 as a non-blocking
-// hook error and runs the command unchanged, while 2 would block it.
+// cmdHook exits 1 on errors: Claude Code and Codex report exit 1 as a
+// non-blocking hook error and run the command unchanged, while 2 would block
+// it.
 func cmdHook(args []string) int {
-	if len(args) == 0 || args[0] != "claude" {
-		fmt.Fprintln(os.Stderr, "jobgate hook: missing agent (jobgate hook claude)")
+	if len(args) == 0 || (args[0] != "claude" && args[0] != "codex") {
+		fmt.Fprintln(os.Stderr, "jobgate hook: missing agent (jobgate hook claude|codex)")
 		return 1
 	}
-	fs := flag.NewFlagSet("hook claude", flag.ContinueOnError)
+	agent := args[0]
+	fs := flag.NewFlagSet("hook "+agent, flag.ContinueOnError)
 	weight := fs.Int("weight", 1, "weight of the wrapped commands; a hint until samples exist")
 	match := fs.String("match", "", "regular expression for the commands to gate (default: built-in list)")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -183,36 +187,55 @@ func cmdHook(args []string) int {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return 0
 	}
-	o := hook.ClaudeOptions{Weight: *weight}
+	var heavy *regexp.Regexp
 	if *match != "" {
 		re, err := regexp.Compile(*match)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "jobgate hook: --match: %v\n", err)
 			return 1
 		}
-		o.Heavy = re
+		heavy = re
 	}
-	if err := hook.Claude(os.Stdin, os.Stdout, o); err != nil {
+	var err error
+	if agent == "claude" {
+		err = hook.Claude(os.Stdin, os.Stdout, hook.ClaudeOptions{Heavy: heavy, Weight: *weight})
+	} else {
+		err = hook.Codex(os.Stdin, os.Stdout, hook.CodexOptions{Heavy: heavy, Weight: *weight, PowerShell: codexPowerShell()})
+	}
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "jobgate hook: %v\n", err)
 		return 1
 	}
 	return 0
 }
 
+// codexPowerShell is the PowerShell that runs commands for Codex on
+// Windows, preferring PowerShell 7 as Codex does.
+func codexPowerShell() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	if _, err := exec.LookPath("pwsh"); err == nil {
+		return "pwsh"
+	}
+	return "powershell"
+}
+
 func cmdSetup(args []string) int {
-	if len(args) == 0 || args[0] != "claude" {
-		fmt.Fprintln(os.Stderr, "jobgate setup: missing agent (jobgate setup claude)")
+	if len(args) == 0 || (args[0] != "claude" && args[0] != "codex") {
+		fmt.Fprintln(os.Stderr, "jobgate setup: missing agent (jobgate setup claude|codex)")
 		return 2
 	}
-	fs := flag.NewFlagSet("setup claude", flag.ContinueOnError)
+	agent := setup.Agent(args[0])
+	fs := flag.NewFlagSet("setup "+args[0], flag.ContinueOnError)
 	remove := fs.Bool("remove", false, "remove jobgate's hook instead of adding it")
 	dryRun := fs.Bool("dry-run", false, "report what would change without writing")
-	path := fs.String("settings", "", "settings file (default: Claude Code's user settings)")
+	path := fs.String("settings", "", "hooks file (default: the agent's user-level file)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return 2
 	}
 	if *path == "" {
-		p, err := setup.ClaudeSettingsPath()
+		p, err := setup.SettingsPath(agent)
 		if err != nil {
 			return fail(err)
 		}
@@ -230,8 +253,8 @@ func cmdSetup(args []string) int {
 	if !*remove && strings.Contains(filepath.ToSlash(exe), "/go-build") {
 		return fail(errors.New("run setup from an installed jobgate, not `go run`"))
 	}
-	command := setup.HookCommand(exe)
-	res, err := setup.Claude(*path, command, *remove, *dryRun)
+	command := setup.HookCommand(exe, agent)
+	res, err := setup.Register(*path, agent, command, *remove, *dryRun)
 	if err != nil {
 		return fail(err)
 	}
@@ -245,6 +268,9 @@ func cmdSetup(args []string) int {
 		verb = "would have " + verb
 	}
 	fmt.Printf("%s: %s\n", *path, verb)
+	if agent == setup.Codex && !*dryRun && (res == setup.Added || res == setup.Updated) {
+		fmt.Println("Codex runs a new or changed hook only after you trust it: start Codex and review it (or run /hooks).")
+	}
 	return 0
 }
 
