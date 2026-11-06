@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -123,7 +124,7 @@ func TestWrapQuotesForSh(t *testing.T) {
 		}
 	}
 	line := `printf '%s\n' "it's" $HOME`
-	wrapped := Wrap(line, "x", 1, Budget{})
+	wrapped := Wrap("", line, "x", 1, Budget{})
 	inner := strings.TrimPrefix(wrapped, "jobgate run --weight 1 --priority background --source claude --as 'x' -- sh -c ")
 	// The quoted argument must reach sh as the original line.
 	out, err := exec.Command("sh", "-c", "printf '%s' "+inner).Output()
@@ -161,5 +162,12 @@ func TestClaudeBackgroundCallsHaveNoBudget(t *testing.T) {
 	s := out.String()
 	if strings.Contains(s, "--max-wait") || strings.Contains(s, "--timeout") || strings.Contains(s, `"timeout"`) {
 		t.Fatalf("background call got a budget: %s", s)
+	}
+}
+
+func TestWrapRunsTheGivenExecutable(t *testing.T) {
+	got := Wrap(filepath.Join("/opt", "job gate", "jobgate"), "pnpm test", "pnpm test", 1, Budget{})
+	if !strings.HasPrefix(got, "'/opt/job gate/jobgate' run --weight 1 ") {
+		t.Fatalf("got %s", got)
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"text/tabwriter"
@@ -34,7 +35,8 @@ Usage:
   jobgate status [--json]
   jobgate daemon
   jobgate hook claude [--weight N] [--match REGEX]
-  jobgate setup claude [--remove] [--dry-run] [--settings PATH]
+  jobgate setup [claude] [--remove] [--dry-run] [--settings PATH]
+  jobgate doctor
   jobgate version
 
 Environment:
@@ -67,6 +69,8 @@ func run(args []string) int {
 		return cmdHook(args[1:])
 	case "setup":
 		return cmdSetup(args[1:])
+	case "doctor":
+		return cmdDoctor(args[1:])
 	case "version", "--version":
 		fmt.Println(version())
 		return 0
@@ -183,7 +187,7 @@ func cmdHook(args []string) int {
 		_, _ = io.Copy(io.Discard, os.Stdin)
 		return 0
 	}
-	o := hook.ClaudeOptions{Weight: *weight}
+	o := hook.ClaudeOptions{Weight: *weight, Exe: hookExe()}
 	if *match != "" {
 		re, err := regexp.Compile(*match)
 		if err != nil {
@@ -199,53 +203,84 @@ func cmdHook(args []string) int {
 	return 0
 }
 
+// cmdSetup registers the hooks of the given agent, or of every installed
+// agent when none is named.
 func cmdSetup(args []string) int {
-	if len(args) == 0 || args[0] != "claude" {
-		fmt.Fprintln(os.Stderr, "jobgate setup: missing agent (jobgate setup claude)")
-		return 2
+	agents := setup.Agents
+	named := len(args) > 0 && !strings.HasPrefix(args[0], "-")
+	if named {
+		if !slices.Contains(setup.Agents, setup.Agent(args[0])) {
+			fmt.Fprintf(os.Stderr, "jobgate setup: unknown agent %q (claude)\n", args[0])
+			return 2
+		}
+		agents = []setup.Agent{setup.Agent(args[0])}
+		args = args[1:]
 	}
-	fs := flag.NewFlagSet("setup claude", flag.ContinueOnError)
-	remove := fs.Bool("remove", false, "remove jobgate's hook instead of adding it")
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	remove := fs.Bool("remove", false, "remove jobgate's hooks instead of adding them")
 	dryRun := fs.Bool("dry-run", false, "report what would change without writing")
-	path := fs.String("settings", "", "settings file (default: Claude Code's user settings)")
-	if err := fs.Parse(args[1:]); err != nil {
+	path := fs.String("settings", "", "hooks file (only with an agent; default: the agent's user-level file)")
+	if err := fs.Parse(args); err != nil {
 		return 2
 	}
-	if *path == "" {
-		p, err := setup.ClaudeSettingsPath()
+	if *path != "" && !named {
+		fmt.Fprintln(os.Stderr, "jobgate setup: --settings needs an agent (jobgate setup claude --settings PATH)")
+		return 2
+	}
+	exe, err := setupExe(*remove)
+	if err != nil {
+		return fail(err)
+	}
+	done := 0
+	for _, a := range agents {
+		if !named && !setup.Detected(a) {
+			continue
+		}
+		file := *path
+		if file == "" {
+			if file, err = setup.SettingsPath(a); err != nil {
+				return fail(err)
+			}
+		}
+		command := setup.HookCommand(exe, a)
+		res, err := setup.Register(file, a, command, *remove, *dryRun)
 		if err != nil {
 			return fail(err)
 		}
-		*path = p
+		verb := map[setup.Result]string{
+			setup.Unchanged: "already up to date",
+			setup.Added:     "added the PreToolUse hook `" + command + "`",
+			setup.Updated:   "updated the PreToolUse hook to `" + command + "`",
+			setup.Removed:   "removed jobgate's PreToolUse hook",
+		}[res]
+		if *dryRun && res != setup.Unchanged {
+			verb = "would have " + verb
+		}
+		fmt.Printf("%s: %s\n", file, verb)
+		done++
 	}
+	if done == 0 {
+		fmt.Println("No supported agent found (Claude Code). Install one, or name it: jobgate setup claude")
+	}
+	return 0
+}
+
+// setupExe is the jobgate path to write into hook settings: a stable path
+// on the PATH when there is one for this binary (see setup.StableExe).
+func setupExe(remove bool) (string, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return fail(err)
+		return "", err
 	}
 	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
 		exe = resolved
 	}
 	// A `go run` binary is deleted when it exits, which would leave a hook
 	// that fails on every Bash call.
-	if !*remove && strings.Contains(filepath.ToSlash(exe), "/go-build") {
-		return fail(errors.New("run setup from an installed jobgate, not `go run`"))
+	if !remove && strings.Contains(filepath.ToSlash(exe), "/go-build") {
+		return "", errors.New("run setup from an installed jobgate, not `go run`")
 	}
-	command := setup.HookCommand(exe)
-	res, err := setup.Claude(*path, command, *remove, *dryRun)
-	if err != nil {
-		return fail(err)
-	}
-	verb := map[setup.Result]string{
-		setup.Unchanged: "already up to date",
-		setup.Added:     "added the PreToolUse hook `" + command + "`",
-		setup.Updated:   "updated the PreToolUse hook to `" + command + "`",
-		setup.Removed:   "removed jobgate's PreToolUse hook",
-	}[res]
-	if *dryRun && res != setup.Unchanged {
-		verb = "would have " + verb
-	}
-	fmt.Printf("%s: %s\n", *path, verb)
-	return 0
+	return setup.StableExe(exe), nil
 }
 
 func cmdDaemon(args []string) int {
@@ -381,4 +416,15 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return strings.TrimSpace(s[:n-3]) + "..."
+}
+
+// hookExe is the jobgate the hook's rewritten commands run: this binary, so
+// they need no PATH lookup, unless it is a `go run` build that is about to
+// be deleted.
+func hookExe() string {
+	exe, err := os.Executable()
+	if err != nil || strings.Contains(filepath.ToSlash(exe), "/go-build") {
+		return "jobgate"
+	}
+	return exe
 }
