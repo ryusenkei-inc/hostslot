@@ -1,0 +1,52 @@
+// Package daemon serves admission over local IPC. The CLI starts it on
+// demand; it exits on its own after a period without jobs.
+//
+// The protocol is newline-delimited JSON. A client opens one connection per
+// job and keeps it open while the job runs, so a crashed client releases its
+// slot when the OS closes the connection.
+package daemon
+
+import (
+	"github.com/ryusenkei-inc/jobgate/internal/gate"
+	"github.com/ryusenkei-inc/jobgate/internal/platform"
+	"github.com/ryusenkei-inc/jobgate/internal/store"
+)
+
+// Client operations.
+const (
+	OpAcquire = "acquire"
+	OpRelease = "release"
+	OpStatus  = "status"
+)
+
+// Server message types.
+const (
+	TypeWait   = "wait"
+	TypeGrant  = "grant"
+	TypeStatus = "status"
+	TypeError  = "error"
+)
+
+// Message is the single envelope for both directions.
+type Message struct {
+	Op   string `json:"op,omitempty"`
+	Type string `json:"type,omitempty"`
+
+	Request *gate.Request `json:"request,omitempty"`
+	Sample  *store.Sample `json:"sample,omitempty"`
+
+	Job      *gate.Job `json:"job,omitempty"`
+	Position int       `json:"position,omitempty"`
+	Status   *Status   `json:"status,omitempty"`
+	Error    string    `json:"error,omitempty"`
+}
+
+// Status describes the gate for `jobgate status`.
+type Status struct {
+	Mode     string                `json:"mode"`
+	PID      int                   `json:"pid,omitempty"`
+	Memory   platform.Memory       `json:"memory"`
+	CPUs     int                   `json:"cpus"`
+	Tracker  platform.Capabilities `json:"tracker"`
+	Snapshot gate.Snapshot         `json:"snapshot"`
+}
