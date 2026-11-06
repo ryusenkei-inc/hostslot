@@ -268,6 +268,13 @@ func cmdSetup(args []string) int {
 	if done == 0 {
 		fmt.Println("No supported agent found (Claude Code). Install one, or name it: loadslot setup claude")
 	}
+	// Setup follows an install or upgrade, so an older daemon is retired now
+	// rather than at the next run (its running jobs still finish).
+	if !*remove && !*dryRun {
+		if p, err := nativePlatform(); err == nil && daemon.RetireOlder(p, daemon.Version()) {
+			fmt.Println("Retired the older daemon; the next loadslot run starts this version's")
+		}
+	}
 	return 0
 }
 

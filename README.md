@@ -14,7 +14,7 @@ loadslot run -- pnpm test     # waits for a slot, then runs pnpm test
 2. Connect your agents: `loadslot setup` registers the Claude Code hook.
 3. Check: `loadslot doctor`.
 
-To upgrade, replace the binary (on Windows, rename the running `loadslot.exe` first); the next run retires the old daemon.
+To upgrade, replace the binary (on Windows, rename the running `loadslot.exe` first) and run `loadslot setup`, which also retires the old daemon.
 
 From then on, heavy commands your agents run go through loadslot. `loadslot status` shows what runs and waits; in [Orca](#orca), the status bar and a panel show it.
 
@@ -164,7 +164,7 @@ Where loadslot is installed but not wanted (CI), set `LOADSLOT_DISABLE=1`.
 | --- | --- |
 | `loadslot run [flags] -- <command>` | Wait for admission, then run the command with stdin, stdout and stderr passed through; prints a status line to stderr every 5 s while waiting |
 | `loadslot status [--json]` | Slots, memory, room for more, running, waiting and recent jobs. `--json` adds held memory, wait reasons and typical durations |
-| `loadslot setup [claude] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds |
+| `loadslot setup [claude] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds, and retire an older daemon |
 | `loadslot doctor [--json]` | Check the binary, the `PATH`, the daemon and the hooks, with how to fix each problem; exits 1 on warnings |
 | `loadslot hook claude [--weight N] [--match REGEX]` | The Claude Code hook (registered by `setup`) |
 | `loadslot daemon [--idle 10m]` | Run the daemon in the foreground (not needed normally) |
