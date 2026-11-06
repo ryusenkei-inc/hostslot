@@ -30,17 +30,54 @@ loadslot does, across tools and repositories. It works the same from a plain ter
 
 In short: Orca shows and paces agents; loadslot schedules the heavy work the agents start, across everything on the machine, and guards memory while it runs.
 
+## Why at the process level
+
+Memory is one pool for the whole machine, and the work that exhausts it comes from many places at once: several agents, several repositories, an editor's test runner, a git hook. Each of those tools can cap only itself.
+
+- **Tool limits don't add up.** `--maxWorkers`, `--checkers` or an IDE's limit on agents each bound one program. Four agents that each respect their own limit still start four type checks together.
+- **The command is where the cost is.** Agents and editors cost little while they think; the cost comes when they run `tsc`, a test suite or a build. Gating those commands, not the agents, lets many agents work in parallel and only the heavy parts take turns.
+- **Only the OS sees it all.** The process tree shows a command's real memory, children included, whatever language or tool it uses. The OS also has the means to act on it: priority classes and `nice`, Job Objects and process signals.
+- **It works with anything.** A command line in, the same command out: no plugin per tool, and the same gate for agents, people, hooks and scripts.
+
+Why not only the OS's own tools: cgroups and Job Object limits cap a process but don't queue it, so a capped build still starts and then fails; early-OOM killers act after memory is gone; the scheduler shares CPU but has no notion of jobs worth waiting for. loadslot uses those mechanisms and adds what they lack: a queue, priorities, and costs learned from earlier runs.
+
+Limits of this layer: loadslot sees only the commands that go through it (hooks, scripts or `loadslot run`); it can't make a running program use less memory, only stop it; it measures every 250 ms to 2 s, so a very fast spike can pass between readings; and it coordinates one user on one machine, not containers, VMs or other users.
+
 ## How it works
 
 - **Slots:** `floor((total memory x 0.6 - reserve) / cost of a weight-1 job)`, capped by the CPU count and at least 1. With the defaults (1 GB reserve, 2 GB per weight-1 job), a 16 GB machine has 4 slots.
 - **Admission:** a job needs free slots for its weight and enough free memory for its estimated peak. The free-memory reading already contains what running jobs use now, so only what they may still grow to is held back: a learned job reports its memory every 2 seconds and holds its remaining headroom (learned peak minus current), since a type check can keep growing for a minute; a job without enough samples holds its estimate for its first 15 seconds. When nothing runs, the next job is always admitted.
 - **Order:** interactive jobs before background jobs, first come first served within each. The head of the queue blocks later jobs, so a heavy job is never starved by lighter ones.
-- **Learning:** loadslot records the peak memory of each wrapped command, including its child processes, keyed by the command and where it runs: inside a git repository, the repository (shared by all of its worktrees) and the path inside it; elsewhere, the directory. `--as` names the work when the command line varies, such as a wrapper script. Until a command has 3 samples, it is estimated from similar work: the same command in other repositories, else the same tool and subcommand (`cargo test`), else the same tool (`cargo`), using the median of their highest peaks; with no similar work, from the weight hint. After 3 runs, its own recent peaks decide: the 90th percentile of the last 10, so one cold outlier doesn't over-reserve every warm run (headroom tracking and the memory ceiling cover a run above it). A command that turns out light takes 1 slot, even with `--weight 3`.
+- **Learning:** each command's peak memory and duration are learned per repository and reused for later runs (see [What it learns](#what-it-learns)).
 - **Inner parallelism:** the wrapped command gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency` and `pnpm_config_workspace_concurrency` (pnpm's `--workspace-concurrency`: pnpm 10 reads the first, pnpm 11 the second), unless `CI` is set or the variable is already set. `LOADSLOT_WORKERS` is always set for your own scripts.
 - **Nesting:** a `loadslot run` inside a gated command runs directly, since the outer job already holds a slot (loadslot sets `LOADSLOT_JOB` for the command). Wrapping at several layers, such as a Claude Code hook, a git hook and package scripts, never deadlocks.
 - **Daemon:** the first `loadslot run` starts a small daemon in the background. The CLI talks to it over a Unix socket or a named pipe. The daemon exits after 10 minutes without jobs. After an upgrade, the first `loadslot run` of the newer version retires an older daemon: the old one stops accepting clients and frees its socket or pipe at once, finishes its current jobs and exits, and the run starts a new daemon. Until then, the two don't see each other's jobs; the free-memory check still sees the memory they use.
 - **Lock fallback:** when the daemon can't start, loadslot falls back to one machine-wide lock per slot. Slots and memory checks still apply, but there is no priority or queue order.
 - **Crash safety:** a job holds its slot through an open connection (or an OS lock in fallback mode). When loadslot or the job is killed, the OS closes it and the slot comes back.
+
+## What counts as heavy
+
+Anything run with `loadslot run` is gated: you decide. The integrations decide for you:
+
+- **Agent hooks** (Claude Code, Codex): the command line is parsed as shell. A simple command is heavy when it is
+  - a package script named `check`, `test`, `build`, `lint` or `typecheck` (also `test:*`, `build:*`), with `pnpm`, `npm`, `yarn` or `bun`, including `-r` and `--filter` runs;
+  - a package script whose body runs a heavy command, whatever its name (`pnpm tc:web` when `tc:web` is `tsc --noEmit …`), read from the nearest `package.json` and followed up to 3 scripts deep;
+  - `vitest`, `jest`, `tsc` or `playwright` (directly or through `npx`, `pnpm exec`, `bunx`);
+  - `go test`, `go build`, `go vet`, `cargo test`, `cargo build`, `cargo check` or `cargo clippy`.
+
+  Only those commands are rewritten, in place; the rest of the line runs as written. Text in quotes, heredocs and comments never counts. Installs, git, formatters and prose linters stay ungated, so they never wait. `--match <regex>` replaces the list.
+- **git pre-push**: the push's `check` script, as one job.
+- **Package scripts**: whatever you wrap.
+
+## What it learns
+
+For each finished job, loadslot records a sample on this machine, in `samples.json` in its data directory. Nothing leaves the machine.
+
+- **Key:** the repository (its common git directory, so all worktrees share it), the path inside it, and the name of the work (the heavy command, such as `pnpm test`, or `--as`). Outside a repository, the directory and the name
+- **Sample:** the peak memory of the whole process tree (committed memory on Windows, resident memory on Linux and macOS), the duration, the exit code and the outcome (`ok`, `failed`, `timeout`, `ceiling`, `machine`). The last 10 per key are kept
+- **Estimate:** with fewer than 3 samples, from similar work: the same command in other repositories, else the same tool and subcommand, else the same tool (median of their highest peaks), else the weight hint. From 3 samples, the 90th percentile of the key's own peaks, so one cold run doesn't over-reserve every warm one
+- **Used for:** admission (does the job fit in free memory), the memory held for running jobs that are still growing, the effective weight in slots, and, from durations, the time-left and start estimates in the Orca panel
+- **Not learned:** runs stopped by `--timeout` (their peak says little). Runs stopped for memory are kept: they show the job needs at least that much
 
 ## Install
 
@@ -148,7 +185,7 @@ loadslot setup --remove   # remove it
 }
 ```
 
-- The line is parsed as Bash. It is heavy when any of its commands, including those in `$(...)`, subshells and `sh -c` / `bash -c` scripts, is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. A package script call is heavy when its script runs a heavy command, whatever it is named: `pnpm tc:web` counts when `tc:web` is `tsc --noEmit …`, read from the `package.json` nearest to the call's directory, following scripts that call scripts up to 3 deep (calls across workspace packages with `-r` or `--filter` are matched by name only). Text in quotes, heredocs and comments never counts. `--match <regex>` replaces this list. A line that doesn't parse is left alone.
+- Which commands count as heavy: see [What counts as heavy](#what-counts-as-heavy). `--match <regex>` replaces the list. A line that doesn't parse is left alone.
 - Only the heavy commands are rewritten, in place: `cd apps/site && pnpm test 2>&1 | tail -20` becomes `cd apps/site && '<path to loadslot>' run --weight 1 --priority background --source claude --as 'pnpm test' -- pnpm test 2>&1 | tail -20`. The rest of the line runs in the agent's own shell as written, so a slot is held only while the heavy command runs (not through a following `gh pr checks --watch`), and a `cd` carries over to the agent's next command. Assignments before a command (`CI=1 pnpm test`) reach it through loadslot. A `sh -c` / `bash -c` call whose script has heavy commands is gated as a whole. Each gated command learns as itself (e.g. `pnpm test`). The absolute path works without loadslot on the `PATH` and skips shims, which would add hundreds of milliseconds to every call. `--weight` sets the weight hint.
 - Light commands (`git`, `pnpm install`, formatters, prose linters) are left alone, so they never wait. `git push` is left alone too: gate the `pre-push` hook instead (see below).
 - On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `LOADSLOT_DISABLE=1` in its environment or in the command line, it does nothing.
