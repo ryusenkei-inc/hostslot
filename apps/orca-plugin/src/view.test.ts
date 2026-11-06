@@ -46,3 +46,10 @@ it('explains a missing loadslot', () => {
   const v = view(undefined, 'loadslot: not found');
   expect(v.problem).toEqual({ title: 'loadslot is not installed or not reachable', detail: 'loadslot: not found', link: 'https://github.com/ryusenkei-inc/loadslot#install' });
 });
+
+it('shows room and setup problems', () => {
+  const v = view({ ...status(), room: 3 }, '', [{ level: 'warn', text: 'claude: hook not registered. Run: loadslot setup' }]);
+  expect(v.facts).toContainEqual({ label: 'Room now', value: '3 more heavy jobs' });
+  expect(v).toMatchObject({ tone: 'warning', headline: '1 setup problem' });
+  expect(v.problems).toHaveLength(1);
+});
