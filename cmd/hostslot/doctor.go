@@ -47,7 +47,6 @@ func cmdDoctor(args []string) int {
 	}
 	checks := []check{{Level: "ok", Text: version() + " at " + exe}}
 	checks = append(checks, pathCheck(exe))
-	checks = append(checks, legacyChecks()...)
 	if p, err := nativePlatform(); err == nil {
 		checks = append(checks, daemonCheck(p))
 	} else {
@@ -90,24 +89,6 @@ func pathCheck(exe string) check {
 	// hand: the plugin installs into its own directory.
 	return check{Level: "warn", Text: fmt.Sprintf("hostslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe)),
 		Title: "Another hostslot executable is on the PATH", Detail: fmt.Sprintf("%s runs in terminals. Delete it and add %s to the PATH.", onPath, filepath.Dir(exe))}
-}
-
-// formerNames are what hostslot was called before.
-var formerNames = []string{"loadslot", "jobgate"}
-
-// legacyChecks find copies under a former name: scripts that fall back to
-// one when `hostslot` isn't on their PATH would start an old daemon with it.
-func legacyChecks() []check {
-	var checks []check
-	for _, name := range formerNames {
-		old, err := exec.LookPath(name)
-		if err != nil {
-			continue
-		}
-		checks = append(checks, check{Level: "warn", Text: fmt.Sprintf("%s, hostslot's former name, is on the PATH (%s); scripts that fall back to it start an old daemon. Delete it", name, old),
-			Title: "An old copy named " + name + " is on the PATH", Detail: fmt.Sprintf("Scripts that fall back to it start an old daemon. Delete %s.", old)})
-	}
-	return checks
 }
 
 func daemonCheck(p *platform.Platform) check {

@@ -229,10 +229,9 @@ func writeAtomic(path string, data []byte) error {
 	return os.Rename(tmp.Name(), path)
 }
 
-// isOurExe reports whether a hook's executable is hostslot, or one of its
-// former names (loadslot, jobgate), so setup updates an old entry in place
-// instead of adding a second hook.
+// isOurExe reports whether a hook's executable is hostslot, so setup updates
+// its entry in place instead of adding a second hook.
 func isOurExe(exe string) bool {
 	base := strings.ToLower(filepath.Base(filepath.FromSlash(exe)))
-	return strings.Contains(base, "hostslot") || strings.Contains(base, "loadslot") || strings.Contains(base, "jobgate")
+	return strings.Contains(base, "hostslot")
 }

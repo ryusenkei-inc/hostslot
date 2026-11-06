@@ -3,8 +3,6 @@
 Hostslot（並列のエージェントが1台のマシンで取り合う資源のスケジューラーの CLI と、その Orca のプラグイン）。構成・コマンドは [README.md](README.md)
 
 - 表記: 文章・UI の製品名は Hostslot、コマンド・コード・パス・パッケージは `hostslot`
-- 旧名: v0.7.0 までの loadslot、v0.2.0 までの jobgate
-  - 移行の処理を維持: フック・データ・環境変数・PATH の警告
 
 ## このリポの規約
 

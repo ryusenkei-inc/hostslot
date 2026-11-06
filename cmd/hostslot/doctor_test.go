@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -63,25 +62,5 @@ func TestSetupReportMarshalsForIntegrations(t *testing.T) {
 	b, err := json.Marshal(r)
 	if err != nil || string(b) != `{"agents":[{"agent":"codex","file":"h.json","result":"added"}],"retired":true}` {
 		t.Fatalf("%s %v", b, err)
-	}
-}
-
-func TestLegacyChecksFindTheFormerNames(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("PATH", dir)
-	if got := legacyChecks(); len(got) != 0 {
-		t.Fatalf("warned without a former name on the PATH: %+v", got)
-	}
-	for _, name := range []string{"loadslot", "jobgate"} {
-		if runtime.GOOS == "windows" {
-			name += ".exe"
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	got := legacyChecks()
-	if len(got) != 2 || got[0].Title != "An old copy named loadslot is on the PATH" || !strings.Contains(got[1].Detail, dir) {
-		t.Fatalf("got %+v", got)
 	}
 }

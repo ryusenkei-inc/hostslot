@@ -251,18 +251,6 @@ Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 - One user on one machine: not containers, VMs or other users
 - On Windows, a child started in the first instant before its parent joins the Job Object can escape tracking. Unix systems other than Linux and macOS track only the root process
 
-### Upgrading from loadslot or jobgate
-
-Hostslot was called loadslot until v0.7.0, and jobgate until v0.2.0.
-
-| | |
-| --- | --- |
-| Hooks | `hostslot setup` replaces hooks registered under a former name |
-| Learned costs, settings | The first run copies `samples.json` and `config.json` from the former data directory |
-| Variables | `LOADSLOT_*` and `JOBGATE_*` are now `HOSTSLOT_*`; `LOADSLOT_DISABLE=1` still turns the gate off |
-| Old executables | Delete them: scripts that fall back to a former name start an old daemon. `hostslot doctor` warns while one is on the `PATH` |
-| Orca plugin | Its ID is now `hostslot`: remove the loadslot plugin and add this one |
-
 ## Development
 
 | Path | Purpose |
