@@ -107,7 +107,7 @@ export function unavailable(reason: string): Item {
     text: 'Hostslot: not found',
     tone: 'warning',
     icon: 'warning',
-    tooltip: `${reason}\nInstall Hostslot: https://github.com/ryusenkei-inc/hostslot#quick-start`,
+    tooltip: `${reason || 'Not on the PATH or in the usual places.'}\nInstall Hostslot: https://github.com/ryusenkei-inc/hostslot#quick-start`,
   };
 }
 

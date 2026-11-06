@@ -22,7 +22,8 @@ func TestEnsureCarriesOverTheFormerDataDirectory(t *testing.T) {
 	if b, err := os.ReadFile(filepath.Join(data, "samples.json")); err != nil || string(b) != `{"k":[]}` {
 		t.Fatalf("samples not carried over: %q %v", b, err)
 	}
-	// An existing data directory is left alone.
+	// It runs once: a file that appears in the former directory later, or one
+	// deleted here to start over, is not copied again.
 	if err := os.WriteFile(filepath.Join(legacy, "config.json"), []byte(`{}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +31,28 @@ func TestEnsureCarriesOverTheFormerDataDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(data, "config.json")); !os.IsNotExist(err) {
-		t.Fatal("copied into an existing data directory")
+		t.Fatal("migrated twice")
+	}
+}
+
+func TestEnsureMigratesIntoTheDirectoryThePluginCreated(t *testing.T) {
+	base := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(base, "loadslot"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "loadslot", "samples.json"), []byte(`{"k":[]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// The Orca plugin installs the executable before the CLI first runs.
+	data := filepath.Join(base, "hostslot")
+	if err := os.MkdirAll(filepath.Join(data, "bin"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := (Paths{Data: data, Runtime: data}).Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(data, "samples.json")); err != nil || string(b) != `{"k":[]}` {
+		t.Fatalf("samples not carried over: %q %v", b, err)
 	}
 }
 
