@@ -143,16 +143,3 @@ func TestCodexKeepsOtherGroupsFirst(t *testing.T) {
 		t.Fatalf("removing Claude's hook touched Codex's: %v", res)
 	}
 }
-
-func TestRegisterReplacesTheFormerNames(t *testing.T) {
-	for _, former := range []string{"loadslot", "jobgate"} {
-		path := write(t, `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"C:/bin/`+former+`.exe hook claude"}]}]}}`)
-		res, err := Register(path, Claude, HookCommand("C:/bin/hostslot.exe", Claude), false, false)
-		if err != nil || res != Updated {
-			t.Fatalf("%s: res %v err %v", former, res, err)
-		}
-		if got := read(t, path); strings.Contains(got, former) || strings.Count(got, "hook claude") != 1 {
-			t.Fatalf("%s hook not replaced in place:\n%s", former, got)
-		}
-	}
-}

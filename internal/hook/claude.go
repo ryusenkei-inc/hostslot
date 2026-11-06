@@ -277,17 +277,16 @@ func claudeBudget(asked time.Duration) (b Budget, toolTimeout time.Duration) {
 	return Budget{MaxWait: claudeMaxTimeout - run, Timeout: run}, claudeMaxTimeout
 }
 
-// disabledIn reports whether line turns the gate off, also under the former
-// name loadslot. A text match may also skip a line that only mentions it,
-// which is the safe side.
+// disabledIn reports whether line turns the gate off. A text match may also
+// skip a line that only mentions it, which is the safe side.
 func disabledIn(line string) bool {
-	return strings.Contains(line, "HOSTSLOT_DISABLE=1") || strings.Contains(line, "LOADSLOT_DISABLE=1")
+	return strings.Contains(line, "HOSTSLOT_DISABLE=1")
 }
 
-// isSelf reports whether a command runs hostslot itself, or a former name, so
-// a line wrapped by an older version is not wrapped again.
+// isSelf reports whether a command runs hostslot itself, so a line is not
+// wrapped twice.
 func isSelf(word string) bool {
-	return word == "hostslot" || word == "loadslot" || word == "jobgate"
+	return word == "hostslot"
 }
 
 // shellExe is exe for a POSIX shell line; the plain name stays unquoted.

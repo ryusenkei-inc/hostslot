@@ -91,10 +91,9 @@ func version() string {
 	return "hostslot (devel)"
 }
 
-// disabled reports whether the gate is turned off, also under the former
-// name, which agents' command lines and shell profiles may still set.
+// disabled reports whether the gate is turned off.
 func disabled() bool {
-	return os.Getenv("HOSTSLOT_DISABLE") == "1" || os.Getenv("LOADSLOT_DISABLE") == "1"
+	return os.Getenv("HOSTSLOT_DISABLE") == "1"
 }
 
 func nativePlatform() (*platform.Platform, error) {
@@ -156,8 +155,7 @@ func cmdRun(args []string) int {
 		Stderr:       os.Stderr,
 		NoDaemon:     os.Getenv("HOSTSLOT_NO_DAEMON") == "1",
 		Disable:      disabled(),
-		// An outer job of a former name (loadslot, jobgate) during an upgrade
-		Nested: os.Getenv(runner.JobVar) != "" || os.Getenv("LOADSLOT_JOB") != "" || os.Getenv("JOBGATE_JOB") != "",
+		Nested:       os.Getenv(runner.JobVar) != "",
 	})
 	if err != nil {
 		return fail(err)

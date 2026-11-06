@@ -57,11 +57,3 @@ func TestGateInPlaceSharesTheWait(t *testing.T) {
 		t.Fatalf("share: %+v", b)
 	}
 }
-
-func TestGateInPlaceLeavesLinesOfFormerNamesAlone(t *testing.T) {
-	for _, line := range []string{"loadslot run -- pnpm test", "LOADSLOT_DISABLE=1 pnpm test", "jobgate run -- go test ./..."} {
-		if _, _, ok := GateInPlace(line, "", nil, func(string, int) string { return "x " }); ok {
-			t.Fatalf("rewrote %q", line)
-		}
-	}
-}
