@@ -54,19 +54,22 @@ func DefaultPaths() (Paths, error) {
 	}
 }
 
-// Ensure creates the directories with user-only permissions.
+// Ensure creates the directories with user-only permissions, and carries
+// over the data of a former name once.
 func (p Paths) Ensure() error {
-	_, statErr := os.Stat(p.Data)
 	for _, d := range []string{p.Data, p.Runtime} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}
 	}
-	if os.IsNotExist(statErr) {
-		migrateLegacy(p.Data)
-	}
+	migrateLegacy(p.Data)
 	return nil
 }
+
+// migratedMarker records that migrateLegacy ran. The data directory alone
+// can't tell: the Orca plugin creates it to install the executable before
+// the CLI first runs.
+const migratedMarker = ".migrated"
 
 // legacyFiles are carried over from the data directory of a former name,
 // so learned costs and settings survive the rename.
@@ -76,13 +79,21 @@ var legacyFiles = []string{"config.json", "samples.json"}
 var legacyDirs = []string{"loadslot", "jobgate"}
 
 // migrateLegacy copies each of legacyFiles from the newest sibling directory
-// of a former name that has it into a newly created default data directory.
-// Errors are ignored: the files only save relearning.
+// of a former name that has it into the default data directory, once. A file
+// already there is kept. Errors are ignored: the files only save relearning.
 func migrateLegacy(data string) {
 	if filepath.Base(data) != "hostslot" {
 		return
 	}
+	marker := filepath.Join(data, migratedMarker)
+	if _, err := os.Stat(marker); err == nil {
+		return
+	}
+	defer func() { _ = os.WriteFile(marker, nil, 0o600) }()
 	for _, name := range legacyFiles {
+		if _, err := os.Stat(filepath.Join(data, name)); err == nil {
+			continue
+		}
 		for _, dir := range legacyDirs {
 			b, err := os.ReadFile(filepath.Join(filepath.Dir(data), dir, name))
 			if err != nil {

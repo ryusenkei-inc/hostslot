@@ -107,14 +107,19 @@ export default function activate(orca: OrcaWorkerApi): void {
   // The install or setup the person started from the panel.
   let task: Pick<Setup, 'progress' | 'result'> = {};
 
+  // A candidate that doesn't exist says nothing worth showing; one that
+  // exists but fails does.
   const status = async (): Promise<Status | undefined> => {
+    reason = '';
     for (const file of found ? [found] : candidates()) {
       try {
         const s = JSON.parse(await run(file, ['status', '--json'])) as Status;
         found = file;
         return s;
       } catch (err) {
-        reason = `${file}: ${err instanceof Error ? err.message : String(err)}`;
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          reason = `${file}: ${err instanceof Error ? err.message : String(err)}`;
+        }
       }
     }
     found = undefined;
@@ -179,7 +184,7 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   const refresh = async () => {
     last = await status();
-    const next = last ? `using ${found} (${last.mode} ${last.version ?? ''})`.trim() : `hostslot unavailable: ${reason}`;
+    const next = last ? `using ${found} (${last.mode} ${last.version ?? ''})`.trim() : `hostslot unavailable: ${reason || 'not found'}`;
     if (next !== state) orca.log((state = next));
     if (found && (found !== checkedFile || polls % DOCTOR_EVERY === 0)) {
       ({ problems, checks, binary } = await checkSetup(found, plugin));
