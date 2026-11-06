@@ -94,6 +94,14 @@ waiting (1)
 
 ## Integration
 
+### Orca
+
+This repository is also an [Orca](https://github.com/stablyai/orca) plugin (`orca-plugin.json` at the root, code in `apps/orca-plugin`). It shows the machine's capacity in Orca's status bar, such as `loadslot 2/4 · 1 waiting · 3.1 GB free`: yellow while jobs wait, red when memory is nearly gone. Pressing it lists the running and waiting jobs with their source, memory and age.
+
+- It runs `loadslot status --json` every 5 seconds, so install loadslot first. It looks for `loadslot` on the PATH Orca started with, then in `~/.local/bin`, `~/go/bin`, WinGet's `Links` and Homebrew's `bin`; `LOADSLOT_BIN` names another path.
+- Gating still comes from the agents' hooks (`loadslot setup`); the plugin only shows.
+- For development: `orca plugin dev load .` from a checkout (Orca asks to approve it; it runs as a trusted worker), `orca plugin logs local.loadslot` for its log.
+
 ### Claude Code
 
 `loadslot hook claude` is a `PreToolUse` hook that rewrites heavy Bash commands to run through loadslot. Register it for every repository with:
@@ -218,7 +226,7 @@ Limitations:
 | `internal/hook` | Agent hooks: rewrite heavy commands to `loadslot run`, text only | — |
 | `internal/setup` | Register agent hooks in the agents' settings files, keeping other entries and key order; find installed agents and stable paths | — |
 | `internal/runner` | `loadslot run`: acquire (daemon or lock fallback), run, release, record | all of the above |
-| `apps/` | TypeScript packages in a pnpm workspace, such as the Orca plugin (`apps/orca-plugin`) | the `loadslot` CLI |
+| `apps/orca-plugin` | Orca plugin: status bar item and status command (manifest: `orca-plugin.json` at the root) | the `loadslot` CLI |
 | `scripts/` | Repository operations, such as managing `.env` | — |
 
 The Go module stays at the repository root, so `go install github.com/ryusenkei-inc/loadslot/cmd/loadslot@latest` and `v*` tags work as for any Go tool. TypeScript packages live in `apps/` and have no runtime dependencies on each other or on the Go code; they call the `loadslot` CLI.
@@ -240,7 +248,7 @@ pnpm env:push [--dry-run]      # push .env values to GitHub Variables / Secrets
 pnpm repo:settings             # apply GitHub repository settings (squash merge only)
 ```
 
-Releases: pushing a `v*` tag runs `.github/workflows/release.yaml`, which tests and publishes binaries with GoReleaser (`.goreleaser.yaml`). `loadslot version` reports the tag through Go's VCS stamping.
+Releases: pushing a `v*` tag runs `.github/workflows/release.yaml`, which tests, checks that `orca-plugin.json` has the same version, and publishes binaries with GoReleaser (`.goreleaser.yaml`). The same tag is the Orca plugin's version. `loadslot version` reports the tag through Go's VCS stamping.
 
 CI (`.github/workflows/ci.yaml`) runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles for all three, and runs the TypeScript typecheck and Vitest, prose, PR title and secret checks.
 

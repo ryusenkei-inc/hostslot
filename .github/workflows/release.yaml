@@ -21,6 +21,11 @@ jobs:
           go-version-file: go.mod
       - name: Test
         run: go test ./...
+      # The Orca plugin directory lists the newest vX.Y.Z tag with the version in orca-plugin.json
+      - name: Plugin version matches the tag
+        run: |
+          version=$(node -p "require('./orca-plugin.json').version")
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "orca-plugin.json has $version, the tag is $GITHUB_REF_NAME"; exit 1; }
       - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
