@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -58,7 +59,14 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 	for k, v := range ev.ToolInput {
 		input[k] = v
 	}
-	input["command"] = Wrap(command, strings.Join(heavy, " && "), o.Weight)
+	budget := Budget{}
+	if background, _ := input["run_in_background"].(bool); !background {
+		ms, _ := input["timeout"].(float64)
+		var toolTimeout time.Duration
+		budget, toolTimeout = claudeBudget(time.Duration(ms) * time.Millisecond)
+		input["timeout"] = toolTimeout.Milliseconds()
+	}
+	input["command"] = Wrap(command, strings.Join(heavy, " && "), o.Weight, budget)
 	enc := json.NewEncoder(out)
 	enc.SetEscapeHTML(false)
 	return enc.Encode(map[string]any{
@@ -73,11 +81,17 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 // (DefaultHeavy when nil), as their words joined by spaces. The line is
 // parsed as Bash, so text in quotes, heredocs and comments never counts as
 // a command, and `sh -c` / `bash -c` scripts are looked into. A line that
-// runs jobgate itself, or that does not parse, has no heavy commands: the
-// hook then leaves it alone rather than guess.
+// runs jobgate itself, sets JOBGATE_DISABLE=1 or does not parse has no heavy
+// commands: the hook then leaves it alone rather than guess.
 func Heavy(line string, heavy *regexp.Regexp) []string {
 	if heavy == nil {
 		heavy = DefaultHeavy
+	}
+	// The same opt-out as for jobgate run, written into the line itself. A
+	// text match may also skip a line that only mentions it, which is the
+	// safe side.
+	if strings.Contains(line, "JOBGATE_DISABLE=1") {
+		return nil
 	}
 	commands, ok := simpleCommands(line, 0)
 	if !ok {
@@ -179,9 +193,44 @@ func shellScript(args []*syntax.Word) (string, bool) {
 
 // Wrap returns line as one jobgate job that learns as label. Agents are not
 // at a terminal, so the job runs at background priority.
-func Wrap(line, label string, weight int) string {
-	return "jobgate run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --as " + shellQuote(label) +
-		" -- sh -c " + shellQuote(line)
+func Wrap(line, label string, weight int, b Budget) string {
+	run := "jobgate run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --as " + shellQuote(label)
+	if b.MaxWait > 0 {
+		run += " --max-wait " + b.MaxWait.String()
+	}
+	if b.Timeout > 0 {
+		run += " --timeout " + b.Timeout.String()
+	}
+	return run + " -- sh -c " + shellQuote(line)
+}
+
+// Budget splits an agent's tool timeout between waiting for a slot and
+// running the command. Zero fields mean no limit.
+type Budget struct {
+	MaxWait time.Duration
+	Timeout time.Duration
+}
+
+// Limits of Claude Code's Bash tool.
+const (
+	claudeDefaultTimeout = 2 * time.Minute
+	claudeMaxTimeout     = 10 * time.Minute
+	// minWait is the least time a job may wait, even when the agent asked
+	// for the longest timeout; the command then gets that much less.
+	minWait = time.Minute
+)
+
+// claudeBudget keeps the command's own timeout (as asked, or the default)
+// and gives it the rest of the Bash tool's maximum to wait for a slot. The
+// tool call itself gets the maximum, so waiting never counts against the
+// command.
+func claudeBudget(asked time.Duration) (b Budget, toolTimeout time.Duration) {
+	run := claudeDefaultTimeout
+	if asked > 0 {
+		run = asked
+	}
+	run = min(run, claudeMaxTimeout-minWait)
+	return Budget{MaxWait: claudeMaxTimeout - run, Timeout: run}, claudeMaxTimeout
 }
 
 func shellQuote(s string) string {

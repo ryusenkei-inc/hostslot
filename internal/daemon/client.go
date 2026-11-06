@@ -80,16 +80,28 @@ type Lease struct {
 	Status Status
 }
 
-// Acquire sends the request and blocks until the daemon admits it. onWait
-// receives each wait update.
-func Acquire(c net.Conn, req gate.Request, onWait func(Message)) (*Lease, error) {
+// ErrBusy means no slot was granted before the deadline.
+var ErrBusy = errors.New("no slot before the deadline")
+
+// Acquire sends the request and blocks until the daemon admits it, or until
+// deadline (none when zero). onWait receives each wait update. On ErrBusy the
+// caller closes the connection, which takes the job out of the queue.
+func Acquire(c net.Conn, req gate.Request, deadline time.Time, onWait func(Message)) (*Lease, error) {
 	if err := json.NewEncoder(c).Encode(Message{Op: OpAcquire, Request: &req}); err != nil {
 		return nil, err
+	}
+	if !deadline.IsZero() {
+		_ = c.SetReadDeadline(deadline)
+		defer c.SetReadDeadline(time.Time{})
 	}
 	r := bufio.NewReader(c)
 	for {
 		var m Message
 		if err := readMessage(r, &m); err != nil {
+			var ne net.Error
+			if errors.As(err, &ne) && ne.Timeout() {
+				return nil, ErrBusy
+			}
 			return nil, fmt.Errorf("daemon connection: %w", err)
 		}
 		switch m.Type {

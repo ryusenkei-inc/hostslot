@@ -35,17 +35,20 @@ Requires Go 1.26 or later. Make sure `$(go env GOPATH)/bin` is on your `PATH`.
 ## Usage
 
 ```sh
-jobgate run [--weight N] [--priority interactive|background] [--as LABEL] -- <command> [args...]
+jobgate run [--weight N] [--priority interactive|background] [--as LABEL]
+            [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
 jobgate status [--json]
 jobgate daemon [--idle 10m]
 jobgate hook claude [--weight N] [--match REGEX]
 jobgate version
 ```
 
-- `run` waits for admission, printing a status line to stderr every 5 seconds, then runs the command with stdin, stdout and stderr passed through. It exits with the command's exit code (`128 + signal` when killed by a signal, `127` when the command isn't found).
+- `run` waits for admission, printing a status line to stderr every 5 seconds, then runs the command with stdin, stdout and stderr passed through. It exits with the command's exit code (`128 + signal` when killed by a signal, `127` when the command isn't found, `75` when `--max-wait` ran out, `124` when `--timeout` stopped it).
 - `--weight` is the expected cost in slots. It only matters until jobgate has learned the command.
 - `--priority` defaults to `interactive` when stdin is a terminal and `background` otherwise.
 - `--as` names the work for learning instead of the command line, e.g. `jobgate run --as "pnpm test" -- sh -c 'pnpm test 2>&1 | tail'`.
+- `--max-wait 5m` gives up waiting for a slot after 5 minutes (exit `75`, retry later). The command never runs without a slot.
+- `--timeout 2m` stops the command's process tree after it has run for 2 minutes (exit `124`). A stopped run is not learned.
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated memory) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
@@ -92,10 +95,10 @@ waiting (1)
 - The line is parsed as Bash. It is heavy when any of its commands, including those in `$(...)`, subshells and `sh -c` / `bash -c` scripts, is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. Text in quotes, heredocs and comments never counts. `--match <regex>` replaces this list. A line that doesn't parse is left alone.
 - The whole line becomes `jobgate run --weight 1 --priority background --as '<heavy commands>' -- sh -c '<line>'`, so it learns as the heavy commands (e.g. `pnpm test`), not the whole line. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
 - Light commands (`git`, `pnpm install`, formatters, prose linters) are left alone, so they never wait. `git push` is left alone too: gate the `pre-push` hook instead (see below).
-- On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `JOBGATE_DISABLE=1`, it does nothing.
+- On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `JOBGATE_DISABLE=1` in its environment or in the command line, it does nothing.
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it.
 
-Time spent waiting for a slot counts toward the Bash tool's timeout.
+Waiting for a slot doesn't eat into the command's own timeout. The hook raises the Bash tool's timeout to its maximum (10 minutes), keeps the command's timeout (as asked, or the 2-minute default, at most 9 minutes) as `--timeout`, and gives the rest to `--max-wait`. When no slot frees up in time, the call fails with exit `75` and a message, so the agent can retry. Background calls (`run_in_background`) wait without a limit.
 
 ### git pre-push
 

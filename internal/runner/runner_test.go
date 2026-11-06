@@ -26,6 +26,9 @@ func TestMain(m *testing.M) {
 		}
 		time.Sleep(600 * time.Millisecond)
 		os.Exit(7 + int(buf[0]) - 1)
+	case "sleep":
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
 	case "touch":
 		os.WriteFile(os.Getenv("JOBGATE_TEST_MARKER"), nil, 0o600)
 		os.Exit(0)
@@ -144,6 +147,46 @@ func TestRunDisabledPassesThrough(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "workers=\n") {
 		t.Fatalf("disabled run set inner parallelism: %q", out)
+	}
+}
+
+func TestRunGivesUpAfterMaxWait(t *testing.T) {
+	p, o, out := setup(t, "touch")
+	marker := filepath.Join(p.Paths.Data, "ran")
+	t.Setenv("JOBGATE_TEST_MARKER", marker)
+	o.MaxWait = 600 * time.Millisecond
+	unlock, ok, err := p.Locks.TryLock("slot-0")
+	if err != nil || !ok {
+		t.Fatalf("hold slot: %v %v", ok, err)
+	}
+	defer unlock()
+	start := time.Now()
+	code, err := Run(p, o)
+	if err != nil || code != ExitBusy {
+		t.Fatalf("code %d err %v, output %s", code, err, out)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatalf("gave up late: %s", time.Since(start))
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("command ran without a slot")
+	}
+}
+
+func TestRunStopsTheCommandAfterTimeout(t *testing.T) {
+	p, o, out := setup(t, "sleep")
+	o.Timeout = 500 * time.Millisecond
+	start := time.Now()
+	code, err := Run(p, o)
+	if err != nil || code != ExitTimeout {
+		t.Fatalf("code %d err %v, output %s", code, err, out)
+	}
+	if time.Since(start) > 10*time.Second {
+		t.Fatalf("stopped late: %s", time.Since(start))
+	}
+	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
+	if peaks := st.Peaks(jobkey.For(o.Dir, o.Args[0])); len(peaks) != 0 {
+		t.Fatalf("recorded a killed run: %v", peaks)
 	}
 }
 
