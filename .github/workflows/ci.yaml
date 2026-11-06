@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0 # the secret scan covers the whole history
       # Node.js for the dev tooling (mise.toml)
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@v5
       - uses: pnpm/action-setup@v6
       - name: Install
         run: pnpm install --frozen-lockfile
