@@ -14,6 +14,25 @@ export type Job = {
   reported?: boolean;
   queued: string;
   started?: string;
+  /** Median duration of its recent runs (loadslot 0.5+). */
+  expectedMs?: number;
+  /** Memory admission holds back for it while it runs (loadslot 0.5+). */
+  heldMB?: number;
+  /** Why it waits: slots, memory or queue (loadslot 0.5+). */
+  reason?: string;
+};
+
+/** A job that ended, from `status --json`'s `recent` (loadslot 0.5+). */
+export type Finished = {
+  command: string;
+  dir: string;
+  key?: string;
+  source?: string;
+  peakMB?: number;
+  durationMs?: number;
+  exitCode: number;
+  outcome: string;
+  ended: string;
 };
 
 /** The output of `loadslot status --json`. */
@@ -22,9 +41,12 @@ export type Status = {
   version?: string;
   memory: { totalMB: number; freeMB: number };
   cpus: number;
-  snapshot: { slots: number; used: number; running: Job[]; waiting: Job[] };
+  snapshot: { slots: number; used: number; heldMB?: number; running: Job[]; waiting: Job[] };
   /** How many more weight-1 jobs would start now; missing before loadslot 0.5. */
   room?: number;
+  reserveMB?: number;
+  ceilingMB?: number;
+  recent?: Finished[];
 };
 
 /** A check of `loadslot doctor --json`, or one the plugin adds. */

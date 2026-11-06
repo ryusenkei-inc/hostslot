@@ -55,12 +55,14 @@ function run(file: string, args: string[]): Promise<string> {
   });
 }
 
-/** Warnings and errors from `loadslot doctor --json`, plus a binary older than the plugin. */
-async function checkSetup(file: string, plugin: string): Promise<Problem[]> {
+/** Warnings and errors from `loadslot doctor --json`, plus a binary older than the plugin, and how many checks ran. */
+async function checkSetup(file: string, plugin: string): Promise<{ problems: Problem[]; checks: number }> {
   const problems: Problem[] = [];
+  let checks = 0;
   try {
-    const checks = JSON.parse(await run(file, ['doctor', '--json'])) as Problem[];
-    problems.push(...checks.filter((c) => c.level === 'warn' || c.level === 'error'));
+    const all = JSON.parse(await run(file, ['doctor', '--json'])) as Problem[];
+    checks = all.length;
+    problems.push(...all.filter((c) => c.level === 'warn' || c.level === 'error'));
   } catch {
     // Before loadslot 0.5 there is no `doctor --json`; the version check below covers it.
   }
@@ -72,7 +74,7 @@ async function checkSetup(file: string, plugin: string): Promise<Problem[]> {
   } catch {
     // The status call already reports an unreachable binary.
   }
-  return problems;
+  return { problems, checks };
 }
 
 export default function activate(orca: OrcaWorkerApi): void {
@@ -82,6 +84,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   let current: View = view(undefined, reason);
   const plugin = pluginVersion();
   let problems: Problem[] = [];
+  let checks = 0;
   let checkedFile: string | undefined;
   let polls = 0;
 
@@ -106,12 +109,12 @@ export default function activate(orca: OrcaWorkerApi): void {
     const next = last ? `using ${found} (${last.mode} ${last.version ?? ''})`.trim() : `loadslot unavailable: ${reason}`;
     if (next !== state) orca.log((state = next));
     if (found && (found !== checkedFile || polls % DOCTOR_EVERY === 0)) {
-      problems = await checkSetup(found, plugin);
+      ({ problems, checks } = await checkSetup(found, plugin));
       checkedFile = found;
     }
     polls++;
     const item = last ? summarize(last, problems) : unavailable(reason);
-    current = view(last, reason, problems);
+    current = view(last, reason, problems, checks);
     // Posts reach the panel only while it is open; it asks for the latest when it opens.
     orca.panels.post('view', current);
     await orca.host.call('statusBar.update', { id: ITEM, ...item }).catch((err) => orca.log(`statusBar.update: ${err}`));
