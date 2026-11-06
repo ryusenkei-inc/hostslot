@@ -11,14 +11,14 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/ryusenkei-inc/loadslot/internal/gate"
+	"github.com/ryusenkei-inc/hostslot/internal/gate"
 )
 
 // FileName is the config file inside the data directory.
 const FileName = "config.json"
 
-// Load reads dataDir/config.json (optional) and applies LOADSLOT_SLOTS,
-// LOADSLOT_COST_MB and LOADSLOT_RESERVE_MB. The result is normalized.
+// Load reads dataDir/config.json (optional) and applies HOSTSLOT_SLOTS,
+// HOSTSLOT_COST_MB and HOSTSLOT_RESERVE_MB. The result is normalized.
 func Load(dataDir string) (gate.Config, error) {
 	var c gate.Config
 	b, err := os.ReadFile(filepath.Join(dataDir, FileName))
@@ -30,17 +30,17 @@ func Load(dataDir string) (gate.Config, error) {
 	case !errors.Is(err, fs.ErrNotExist):
 		return gate.Config{}, err
 	}
-	if v, ok, err := envInt("LOADSLOT_SLOTS"); err != nil {
+	if v, ok, err := envInt("HOSTSLOT_SLOTS"); err != nil {
 		return gate.Config{}, err
 	} else if ok {
 		c.Slots = int(v)
 	}
-	if v, ok, err := envInt("LOADSLOT_COST_MB"); err != nil {
+	if v, ok, err := envInt("HOSTSLOT_COST_MB"); err != nil {
 		return gate.Config{}, err
 	} else if ok {
 		c.CostMB = v
 	}
-	if v, ok, err := envInt("LOADSLOT_RESERVE_MB"); err != nil {
+	if v, ok, err := envInt("HOSTSLOT_RESERVE_MB"); err != nil {
 		return gate.Config{}, err
 	} else if ok {
 		c.ReserveMB = v

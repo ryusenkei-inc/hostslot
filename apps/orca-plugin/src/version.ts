@@ -1,4 +1,4 @@
-// Compares loadslot's version with the plugin's: the plugin and the binary
+// Compares hostslot's version with the plugin's: the plugin and the binary
 // share release tags, and an older binary may lack what the plugin reads.
 
 type Parsed = { core: [number, number, number]; pre: boolean };

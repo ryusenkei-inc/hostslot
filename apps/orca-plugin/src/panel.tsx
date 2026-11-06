@@ -26,7 +26,7 @@ import {
 import type { View } from './view';
 
 const current = atom<View | null>(null);
-const installLink = 'https://github.com/ryusenkei-inc/loadslot#quick-start';
+const installLink = 'https://github.com/ryusenkei-inc/hostslot#quick-start';
 
 export function setup(ctx: PanelContext): void {
   ctx.subscriptions.push(plugin.on('view', (v: View) => set(current, v)));
@@ -216,7 +216,7 @@ function Setup({ v }: { v: View }) {
       {!v.machine ? <Link href={installLink}>Other ways to install</Link> : null}
       {problems.length === 0 && v.machine ? (
         <Collapsible title="Setup" description={checks > 0 ? `All ${checks} checks pass` : 'Not checked yet'}>
-          <KeyValue label="loadslot" items={facts} />
+          <KeyValue label="Hostslot" items={facts} />
         </Collapsible>
       ) : null}
     </Stack>
@@ -225,7 +225,7 @@ function Setup({ v }: { v: View }) {
 
 export default function Panel() {
   const v = read(current);
-  if (!v) return <EmptyState title="Reading loadslot status…" />;
+  if (!v) return <EmptyState title="Reading Hostslot status…" />;
   return (
     <Stack gap="md">
       <Heading>{v.headline}</Heading>

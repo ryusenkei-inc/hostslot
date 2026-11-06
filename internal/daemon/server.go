@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryusenkei-inc/loadslot/internal/gate"
-	"github.com/ryusenkei-inc/loadslot/internal/platform"
-	"github.com/ryusenkei-inc/loadslot/internal/store"
+	"github.com/ryusenkei-inc/hostslot/internal/gate"
+	"github.com/ryusenkei-inc/hostslot/internal/platform"
+	"github.com/ryusenkei-inc/hostslot/internal/store"
 )
 
 // ErrRunning is returned by Run when another daemon holds the daemon lock.
@@ -205,8 +205,8 @@ const stopCooldown = 10 * time.Second
 
 // stopLargestLocked is the last line of defence: when free memory falls
 // below half the reserve, the largest background job is asked to stop.
-// Jobs under their own ceilings, plus apps outside loadslot, can still use
-// up memory together. When apps outside loadslot are the cause, a job using
+// Jobs under their own ceilings, plus apps outside hostslot, can still use
+// up memory together. When apps outside hostslot are the cause, a job using
 // less than a quarter of the reserve would free next to nothing, so it keeps
 // running.
 func (s *Server) stopLargestLocked() {

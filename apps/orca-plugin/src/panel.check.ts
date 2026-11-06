@@ -53,8 +53,8 @@ const show = (s: Status | undefined, problems: Problem[] = [], setup: Partial<Se
 
 const install = {
   request: 'install' as const,
-  label: 'Update loadslot to 0.7.0',
-  note: "Downloads it from GitHub to C:\\Users\\me\\AppData\\Local\\loadslot\\bin\\loadslot.exe, checks it against the release's checksums, then connects your agents.",
+  label: 'Update Hostslot to 0.8.0',
+  note: "Downloads it from GitHub to C:\\Users\\me\\AppData\\Local\\hostslot\\bin\\hostslot.exe, checks it against the release's checksums, then connects your agents.",
 };
 
 export default defineCheck({
@@ -109,27 +109,27 @@ export default defineCheck({
         title: 'An older daemon is running',
         detail: 'v0.4.1 (pid 27416). The next heavy command replaces it.',
       },
-      { level: 'warn', text: '', fix: 'setup', title: "Codex isn't connected", detail: 'No loadslot hook in ~/.codex/hooks.json.' },
+      { level: 'warn', text: '', fix: 'setup', title: "Codex isn't connected", detail: 'No Hostslot hook in ~/.codex/hooks.json.' },
     ],
-    { action: { request: 'setup', label: 'Fix with loadslot setup', note: 'Connects your agents and replaces an older daemon.' } },
+    { action: { request: 'setup', label: 'Fix with hostslot setup', note: 'Connects your agents and replaces an older daemon.' } },
   ),
   outdated: show(
     status(),
-    [{ level: 'warn', text: '', title: 'loadslot is older than this plugin', detail: 'loadslot v0.6.0; the plugin needs 0.7.0 or later.' }],
+    [{ level: 'warn', text: '', title: 'Hostslot is older than this plugin', detail: 'Hostslot v0.7.0; the plugin needs 0.8.0 or later.' }],
     { action: install },
   ),
-  missing: show(undefined, [], { action: { ...install, label: 'Install loadslot 0.7.0' } }, 0),
+  missing: show(undefined, [], { action: { ...install, label: 'Install Hostslot 0.8.0' } }, 0),
   installed: show(status(), [], {
     result: {
       ok: true,
-      title: 'Installed loadslot 0.7.0',
+      title: 'Installed Hostslot 0.8.0',
       items: [
-        { label: 'Location', value: 'C:\\Users\\me\\AppData\\Local\\loadslot\\bin\\loadslot.exe' },
+        { label: 'Location', value: 'C:\\Users\\me\\AppData\\Local\\hostslot\\bin\\hostslot.exe' },
         { label: 'Claude Code', value: 'already set up' },
         { label: 'Codex', value: 'hook added' },
         { label: 'Daemon', value: 'older one retired; the next run starts this version' },
       ],
-      next: 'Open Codex and trust the loadslot hook with /hooks. Until then Codex skips it.',
+      next: 'Open Codex and trust the hostslot hook with /hooks. Until then Codex skips it.',
     },
   }),
 });

@@ -1,4 +1,4 @@
-module github.com/ryusenkei-inc/loadslot
+module github.com/ryusenkei-inc/hostslot
 
 go 1.26.0
 

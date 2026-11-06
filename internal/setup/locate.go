@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// Agents are the agents `loadslot setup` registers when they are installed.
+// Agents are the agents `hostslot setup` registers when they are installed.
 var Agents = []Agent{Claude, Codex}
 
 // Detected reports whether the agent looks installed: its settings
@@ -24,13 +24,13 @@ func Detected(a Agent) bool {
 }
 
 // StableExe returns the path to write into hook settings for the running
-// executable exe. When `loadslot` on the PATH is the same file, such as a
+// executable exe. When `hostslot` on the PATH is the same file, such as a
 // package manager's symlink (Homebrew's bin, WinGet's Links), that path
 // survives upgrades while exe, resolved to a versioned directory, does not.
 // A different file on the PATH (a shim, another copy) is not used: a shim
 // adds hundreds of milliseconds to every hooked call.
 func StableExe(exe string) string {
-	onPath, err := exec.LookPath("loadslot")
+	onPath, err := exec.LookPath("hostslot")
 	if err != nil {
 		return exe
 	}
@@ -55,7 +55,7 @@ func sameFile(a, b string) bool {
 	return os.SameFile(sa, sb)
 }
 
-// Find returns the command of the agent's loadslot hook in the file at path,
+// Find returns the command of the agent's hostslot hook in the file at path,
 // or found false when none is registered or the file does not exist.
 func Find(path string, a Agent) (command string, found bool, err error) {
 	data, err := os.ReadFile(path)
@@ -82,7 +82,7 @@ func Find(path string, a Agent) (command string, found bool, err error) {
 		return "", false, err
 	}
 	for _, g := range groups {
-		if c, ours := loadslotCommand(g, a); ours {
+		if c, ours := hostslotCommand(g, a); ours {
 			return c, true, nil
 		}
 	}

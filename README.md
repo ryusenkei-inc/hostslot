@@ -1,24 +1,24 @@
-# loadslot
+# Hostslot
 
 Run more coding agents in parallel without freezing your machine.
 
-loadslot gates heavy commands (type checks, test runners, builds) machine-wide: each starts when there is room in memory and CPU, the rest wait their turn, and a runaway is stopped before it takes the machine down.
+Hostslot schedules what parallel coding agents share on one machine. Heavy commands (type checks, test runners, builds) get capacity: each starts when there is room in memory and CPU, the rest wait their turn, and a runaway is stopped before it takes the machine down. Exclusive resources such as dev-server ports get leased per worktree (planned).
 
 ```sh
-loadslot run -- pnpm test     # waits for a slot, then runs pnpm test
+hostslot run -- pnpm test     # waits for a slot, then runs pnpm test
 ```
 
 ## Quick start
 
-1. Install: download the archive for your OS from [Releases](https://github.com/ryusenkei-inc/loadslot/releases) and put `loadslot` on your `PATH`, or `go install github.com/ryusenkei-inc/loadslot/cmd/loadslot@latest` (Go 1.26+).
-2. Connect your agents: `loadslot setup` registers the hooks of Claude Code and Codex.
-3. Check: `loadslot doctor`.
+1. Install: download the archive for your OS from [Releases](https://github.com/ryusenkei-inc/hostslot/releases) and put `hostslot` on your `PATH`, or `go install github.com/ryusenkei-inc/hostslot/cmd/hostslot@latest` (Go 1.26+).
+2. Connect your agents: `hostslot setup` registers the hooks of Claude Code and Codex.
+3. Check: `hostslot doctor`.
 
-To upgrade, replace the binary (on Windows, rename the running `loadslot.exe` first) and run `loadslot setup`, which also retires the old daemon.
+To upgrade, replace the binary (on Windows, rename the running `hostslot.exe` first) and run `hostslot setup`, which also retires the old daemon.
 
-From then on, heavy commands your agents run go through loadslot. `loadslot status` shows what runs and waits; in [Orca](#orca), the status bar and a panel show it.
+From then on, heavy commands your agents run go through Hostslot. `hostslot status` shows what runs and waits; in [Orca](#orca), the status bar and a panel show it.
 
-In Orca, the plugin does steps 1 and 2 for you: its panel offers to install loadslot and run its setup.
+In Orca, the plugin does steps 1 and 2 for you: its panel offers to install Hostslot and run its setup.
 
 ## Why
 
@@ -33,21 +33,22 @@ Several agents, each in its own worktree, start `tsc`, test suites and builds at
 | Only the OS sees it all | The process tree shows a command's real memory, children included, in any language; the OS can also act on it (priority, Job Objects, signals) |
 | It works with anything | A command line in, the same command out: one gate for agents, people, git hooks and scripts |
 
-The OS's own tools don't queue: cgroups and Job Object limits make a capped build fail instead of wait, early-OOM killers act after memory is gone, and the scheduler has no notion of jobs worth waiting for. loadslot uses those mechanisms and adds a queue, priorities and learned costs.
+The OS's own tools don't queue: cgroups and Job Object limits make a capped build fail instead of wait, early-OOM killers act after memory is gone, and the scheduler has no notion of jobs worth waiting for. Hostslot uses those mechanisms and adds a queue, priorities and learned costs.
 
-### loadslot and Orca
+### Compared with other approaches
 
-[Orca](https://github.com/stablyai/orca) shows and paces agents; loadslot schedules the heavy work the agents start, across the whole machine, and guards memory while it runs. As of Orca 1.4.25x:
-
-| Need | Orca | loadslot |
-| --- | --- | --- |
-| See memory use | Resource Manager: per-session CPU and memory, kill a session by hand | Per-job memory, held memory, why jobs wait, recent outcomes |
-| Limit agents | Orchestration runs 4 tasks at a time by default; restores pause when the process count grows fast | Advisory room for more work; agents are not gated |
-| Keep heavy commands from piling up | Not covered | Admits each when slots and memory allow; the rest queue by priority |
-| Know a command's cost | Not covered | Learns peak memory and duration per repository |
-| Share CPU fairly | Not covered | Lower OS priority and inner parallelism per job |
-| Stop a runaway | Not covered (on Linux, one OOM kill no longer takes every terminal) | Per-job ceiling, out-of-memory stop, cleanup of leftovers |
-| Scope | Orca's terminals | The whole machine: any editor or terminal, agent hooks, git hooks, scripts |
+| | Agent orchestrators' built-in limits | File-lock wrappers | Generic command queues | OS limits (cgroups, Job Objects) | Per-worktree port tools | **Hostslot** |
+| --- | --- | --- | --- | --- | --- | --- |
+| Scope | Their own agents and terminals | Commands you wrap | Commands you submit | Processes you put under them | Dev servers you start through them | Everything that runs heavy commands on the machine: agents, editors, terminals, git hooks, scripts |
+| Heavy commands wait instead of piling up | Agents are paced; their commands all start | Yes, by a fixed count | Yes, by a fixed count | No: capped work fails | — | Yes, admitted by free slots and free memory |
+| Knows what a command costs | No | No | No | You set the limit | — | Learns peak memory and duration per repository and command |
+| People before agents | No | No | Manual priorities | No | — | Interactive jobs first; agents at a lower OS priority |
+| Shares CPU inside jobs | No | No | No | CPU quotas | — | Sets each job's worker count (test runners, workspace concurrency) |
+| Stops a runaway | By hand | No | No | At the limit, as an allocation failure | — | Per-job ceiling and out-of-memory stop, with a clear exit code; leftover processes cleaned up |
+| Agents need no new habits | Built in | A rule or wrapper to remember | Submit through the queue | Set up per process | A command or env file per worktree | Hooks rewrite the heavy commands in place, pipes and `&&` included |
+| Shows what runs and waits | Per agent | No | Its own list | No | Ports in use | Status bar and panel in the agent IDE, `hostslot status` |
+| Windows, macOS, Linux | Depends | Mostly macOS and Linux | Varies | One OS each | Varies | All three |
+| Dev-server ports | Some assign a port range per workspace | — | — | — | Yes | Planned |
 
 ## How it works
 
@@ -57,9 +58,9 @@ The OS's own tools don't queue: cgroups and Job Object limits make a capped buil
 | **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents. Running jobs that are still growing hold back the rest of their estimate. When nothing runs, the next job always starts |
 | **Order** | Interactive jobs (a person at a terminal) before background jobs (agents, scripts), first come first served; the head of the queue blocks later jobs, so a heavy job is never starved |
 | **Learning** | Each command's peak memory and duration, per repository (see [What it learns](#what-it-learns)) |
-| **CPU share** | Background jobs run at a lower OS priority. Each job gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency`, `pnpm_config_workspace_concurrency` and `LOADSLOT_WORKERS` (not under `CI`, never overriding a set value) |
-| **Nesting** | A `loadslot run` inside a gated job runs directly (`LOADSLOT_JOB` is set), so hooks, git hooks and scripts can wrap each other without deadlock |
-| **Daemon** | Started by the first `loadslot run`, over a Unix socket or named pipe; exits after 10 idle minutes. A newer version retires an older daemon, which finishes its jobs first. Without a daemon, one machine-wide lock per slot (no queue order) |
+| **CPU share** | Background jobs run at a lower OS priority. Each job gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency`, `pnpm_config_workspace_concurrency` and `HOSTSLOT_WORKERS` (not under `CI`, never overriding a set value) |
+| **Nesting** | A `hostslot run` inside a gated job runs directly (`HOSTSLOT_JOB` is set), so hooks, git hooks and scripts can wrap each other without deadlock |
+| **Daemon** | Started by the first `hostslot run`, over a Unix socket or named pipe; exits after 10 idle minutes. A newer version retires an older daemon, which finishes its jobs first. Without a daemon, one machine-wide lock per slot (no queue order) |
 | **Crash safety** | A job holds its slot through an open connection or OS lock; if it dies, the slot comes back |
 
 ### Guards
@@ -74,7 +75,7 @@ The OS's own tools don't queue: cgroups and Job Object limits make a capped buil
 
 ## What counts as heavy
 
-You decide with `loadslot run`. The integrations decide like this:
+You decide with `hostslot run`. The integrations decide like this:
 
 | Integration | Gated |
 | --- | --- |
@@ -89,7 +90,7 @@ A command is heavy when it is one of:
 - `vitest`, `jest`, `tsc`, `playwright` (also through `npx`, `pnpm exec`, `bunx`)
 - `go test|build|vet`, `cargo test|build|check|clippy`
 
-The line is parsed as shell, so text in quotes, heredocs and comments never counts. Installs, git, formatters and prose linters stay ungated and never wait. `loadslot hook claude --match <regex>` (or `hook codex`) replaces the list.
+The line is parsed as shell, so text in quotes, heredocs and comments never counts. Installs, git, formatters and prose linters stay ungated and never wait. `hostslot hook claude --match <regex>` (or `hook codex`) replaces the list.
 
 ## What it learns
 
@@ -109,21 +110,21 @@ Each finished job adds a sample to `samples.json` in the data directory. Nothing
 
 This repository is also an Orca plugin (`orca-plugin.json` at the root, code in `apps/orca-plugin`).
 
-<img src="docs/images/orca-panel.png" alt="The loadslot panel in Orca: memory and slots, running and waiting jobs, a guard stop, recent jobs" width="360">
+<img src="docs/images/orca-panel.png" alt="The Hostslot panel in Orca: memory and slots, running and waiting jobs, a guard stop, recent jobs" width="360">
 
-- **Status bar:** `loadslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
-- **Panel** (press the item to open the right sidebar, then pick the loadslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; recent outcomes, with guard stops called out; jobs by repository; setup checks
-- **Install from the panel:** when loadslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in loadslot's data directory and runs `loadslot setup`. When a hook is missing, it offers `loadslot setup` alone. Nothing is downloaded or written before a press
-- It reads `loadslot status --json` every 5 seconds. It finds `loadslot` at `LOADSLOT_BIN`, in its own `bin`, on Orca's `PATH`, in `~/.local/bin`, `~/go/bin`, WinGet's `Links` or Homebrew's `bin`
+- **Status bar:** `Hostslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
+- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; recent outcomes, with guard stops called out; jobs by repository; setup checks
+- **Install from the panel:** when Hostslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in Hostslot's data directory and runs `hostslot setup`. When a hook is missing, it offers `hostslot setup` alone. Nothing is downloaded or written before a press
+- It reads `hostslot status --json` every 5 seconds. It finds `hostslot` at `HOSTSLOT_BIN`, in its own `bin`, on Orca's `PATH`, in `~/.local/bin`, `~/go/bin`, WinGet's `Links` or Homebrew's `bin`
 - It only shows; gating comes from the agents' hooks
-- Development: `orca plugin dev load .`, then `orca plugin logs local.loadslot`
+- Development: `orca plugin dev load .`, then `orca plugin logs local.hostslot`
 
 ### Claude Code
 
 ```sh
-loadslot setup            # add or update the PreToolUse hook in ~/.claude/settings.json
-loadslot setup --dry-run  # show what would change
-loadslot setup --remove   # remove it
+hostslot setup            # add or update the PreToolUse hook in ~/.claude/settings.json
+hostslot setup --dry-run  # show what would change
+hostslot setup --remove   # remove it
 ```
 
 `setup` touches only its own entry (other keys keep their order, other tools' hooks stay), and points the hook at a path that survives upgrades when a package manager links one onto the `PATH`.
@@ -133,42 +134,42 @@ The hook rewrites only the heavy commands, in place:
 ```sh
 cd apps/site && pnpm test 2>&1 | tail -20
 # becomes (abridged; the real prefix also carries --weight, --max-wait and --timeout)
-cd apps/site && '<loadslot>' run --priority background --source claude --as 'pnpm test' -- pnpm test 2>&1 | tail -20
+cd apps/site && '<hostslot>' run --priority background --source claude --as 'pnpm test' -- pnpm test 2>&1 | tail -20
 ```
 
 - A slot is held only while `pnpm test` runs, and `cd` carries over to the agent's next command
 - Waiting doesn't eat into the command's timeout: the hook raises the Bash tool's timeout to 10 minutes, keeps the command's own as `--timeout` and gives the rest to `--max-wait`. Out of time, the call exits `75` so the agent can retry
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it
-- `LOADSLOT_DISABLE=1` in the environment or the command line turns it off
+- `HOSTSLOT_DISABLE=1` in the environment or the command line turns it off
 
 ### Codex
 
-`loadslot setup` also adds a `PreToolUse` hook to `~/.codex/hooks.json` (or `$CODEX_HOME`). Codex runs a new or changed hook only after you trust it: start Codex and review it with `/hooks`.
+`hostslot setup` also adds a `PreToolUse` hook to `~/.codex/hooks.json` (or `$CODEX_HOME`). Codex runs a new or changed hook only after you trust it: start Codex and review it with `/hooks`.
 
-The hook rewrites heavy commands in place, as for Claude Code; on Windows the prefix is PowerShell (`& '<loadslot>' run … -- pnpm test`). It gates only where it can:
+The hook rewrites heavy commands in place, as for Claude Code; on Windows the prefix is PowerShell (`& '<hostslot>' run … -- pnpm test`). It gates only where it can:
 
 | Codex session | What happens |
 | --- | --- |
 | No approvals, no sandbox (full access, `--dangerously-bypass-approvals-and-sandbox`) | Gated |
-| No approvals, in the sandbox | Rewritten, but the sandbox keeps loadslot from its daemon (on Windows it is another user), so the command runs ungated |
+| No approvals, in the sandbox | Rewritten, but the sandbox keeps Hostslot from its daemon (on Windows it is another user), so the command runs ungated |
 | With approvals | Left alone: Codex applies a rewrite only with an "allow" decision, which may skip your approval |
 
 ### git pre-push
 
 ```sh
 #!/bin/sh
-exec loadslot run --weight 2 -- pnpm check
+exec hostslot run --weight 2 -- pnpm check
 ```
 
-The shared `pre-push` of [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) does this when loadslot is on the `PATH`.
+The shared `pre-push` of [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) does this when Hostslot is on the `PATH`.
 
 ### Package scripts
 
 ```json
-{ "scripts": { "test": "loadslot run -- vitest run" } }
+{ "scripts": { "test": "hostslot run -- vitest run" } }
 ```
 
-Where loadslot is installed but not wanted (CI), set `LOADSLOT_DISABLE=1`.
+Where Hostslot is installed but not wanted (CI), set `HOSTSLOT_DISABLE=1`.
 
 ## Reference
 
@@ -176,13 +177,13 @@ Where loadslot is installed but not wanted (CI), set `LOADSLOT_DISABLE=1`.
 
 | Command | |
 | --- | --- |
-| `loadslot run [flags] -- <command>` | Wait for admission, then run the command with stdin, stdout and stderr passed through; prints a status line to stderr every 5 s while waiting |
-| `loadslot status [--json]` | Slots, memory, room for more, running, waiting and recent jobs. `--json` adds held memory, wait reasons and typical durations |
-| `loadslot setup [claude\|codex] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds, and retire an older daemon |
-| `loadslot doctor [--json]` | Check the binary, the `PATH`, the daemon and the hooks, with how to fix each problem; exits 1 on warnings |
-| `loadslot hook claude\|codex [--weight N] [--match REGEX]` | The hook of Claude Code or Codex (registered by `setup`) |
-| `loadslot daemon [--idle 10m]` | Run the daemon in the foreground (not needed normally) |
-| `loadslot version` | Print the version |
+| `hostslot run [flags] -- <command>` | Wait for admission, then run the command with stdin, stdout and stderr passed through; prints a status line to stderr every 5 s while waiting |
+| `hostslot status [--json]` | Slots, memory, room for more, running, waiting and recent jobs. `--json` adds held memory, wait reasons and typical durations |
+| `hostslot setup [claude\|codex] [--remove] [--dry-run] [--settings PATH]` | Register the hooks of the agents it finds, and retire an older daemon |
+| `hostslot doctor [--json]` | Check the binary, the `PATH`, the daemon and the hooks, with how to fix each problem; exits 1 on warnings |
+| `hostslot hook claude\|codex [--weight N] [--match REGEX]` | The hook of Claude Code or Codex (registered by `setup`) |
+| `hostslot daemon [--idle 10m]` | Run the daemon in the foreground (not needed normally) |
+| `hostslot version` | Print the version |
 
 `run` flags:
 
@@ -191,7 +192,7 @@ Where loadslot is installed but not wanted (CI), set `LOADSLOT_DISABLE=1`.
 | `--weight N` | Expected cost in slots until the command is learned (default 1) |
 | `--priority interactive\|background` | Default: interactive when stdin is a terminal |
 | `--as LABEL` | Learn as this name instead of the command line |
-| `--source NAME` | Who started it, shown in status (default `$LOADSLOT_SOURCE`) |
+| `--source NAME` | Who started it, shown in status (default `$HOSTSLOT_SOURCE`) |
 | `--max-wait 5m` | Give up waiting after 5 minutes |
 | `--timeout 2m` | Stop the job after it has run 2 minutes |
 | `--max-memory MB` | Memory ceiling for this run |
@@ -209,14 +210,14 @@ Optional `config.json` in the data directory, reread every second:
 
 | Variable | Effect |
 | --- | --- |
-| `LOADSLOT_SLOTS`, `LOADSLOT_COST_MB`, `LOADSLOT_RESERVE_MB` | Override `slots`, `costMB`, `reserveMB` (read when the daemon starts) |
-| `LOADSLOT_PRIORITY` | Default priority |
-| `LOADSLOT_DISABLE=1` | Run commands without the gate |
-| `LOADSLOT_NO_DAEMON=1` | Use the lock fallback |
-| `LOADSLOT_SOURCE` | Default `--source` |
-| `LOADSLOT_HOME` | Data directory; separate homes don't share slots |
+| `HOSTSLOT_SLOTS`, `HOSTSLOT_COST_MB`, `HOSTSLOT_RESERVE_MB` | Override `slots`, `costMB`, `reserveMB` (read when the daemon starts) |
+| `HOSTSLOT_PRIORITY` | Default priority |
+| `HOSTSLOT_DISABLE=1` | Run commands without the gate |
+| `HOSTSLOT_NO_DAEMON=1` | Use the lock fallback |
+| `HOSTSLOT_SOURCE` | Default `--source` |
+| `HOSTSLOT_HOME` | Data directory; separate homes don't share slots |
 
-Data directory: `~/.local/share/loadslot` (Linux, or `$XDG_DATA_HOME`), `~/Library/Application Support/loadslot` (macOS), `%LOCALAPPDATA%\loadslot` (Windows). It holds `config.json`, `samples.json` and `daemon.log`.
+Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Library/Application Support/hostslot` (macOS), `%LOCALAPPDATA%\hostslot` (Windows). It holds `config.json`, `samples.json` and `daemon.log`.
 
 ### OS support
 
@@ -230,24 +231,32 @@ Data directory: `~/.local/share/loadslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 
 ### Limitations
 
-- loadslot sees only commands that go through it (hooks, scripts, `loadslot run`); it can stop a program but not make it use less memory
+- Hostslot sees only commands that go through it (hooks, scripts, `hostslot run`); it can stop a program but not make it use less memory
 - Memory is read every 0.25–2 s, so a very fast spike can pass a check. OS-enforced limits aren't used: a failed allocation ends a program with its own error, which an agent can't tell from a test failure
 - One user on one machine: not containers, VMs or other users
 - On Windows, a child started in the first instant before its parent joins the Job Object can escape tracking. Unix systems other than Linux and macOS track only the root process
 
-### Upgrading from jobgate
+### Upgrading from loadslot or jobgate
 
-loadslot was called `jobgate` until v0.2.0. `loadslot setup` replaces a hook registered under the old name; the first run carries over `samples.json` and `config.json`; `JOBGATE_*` variables are now `LOADSLOT_*`. Delete any `jobgate` executable: scripts that fall back to it start an old daemon, and `loadslot doctor` warns while one is on the `PATH`.
+Hostslot was called loadslot until v0.7.0, and jobgate until v0.2.0.
+
+| | |
+| --- | --- |
+| Hooks | `hostslot setup` replaces hooks registered under a former name |
+| Learned costs, settings | The first run copies `samples.json` and `config.json` from the former data directory |
+| Variables | `LOADSLOT_*` and `JOBGATE_*` are now `HOSTSLOT_*`; `LOADSLOT_DISABLE=1` still turns the gate off |
+| Old executables | Delete them: scripts that fall back to a former name start an old daemon. `hostslot doctor` warns while one is on the `PATH` |
+| Orca plugin | Its ID is now `hostslot`: remove the loadslot plugin and add this one |
 
 ## Development
 
 | Path | Purpose |
 | --- | --- |
-| `cmd/loadslot` | CLI |
+| `cmd/hostslot` | CLI |
 | `internal/gate` | Scheduler core, OS-independent and pure: slots, admission, priority, estimates |
 | `internal/platform` | OS ports: memory, process tracking, IPC, locks, paths (one file per OS) |
 | `internal/daemon` | Daemon and client over IPC |
-| `internal/runner` | `loadslot run`: acquire, run, release, record |
+| `internal/runner` | `hostslot run`: acquire, run, release, record |
 | `internal/store`, `internal/jobkey` | Learned samples and their keys |
 | `internal/config` | `config.json` and environment overrides |
 | `internal/hook`, `internal/setup` | Agent hooks and their registration |
@@ -259,7 +268,7 @@ go test ./...        # Go tests
 pnpm install         # dev tooling and git hooks
 pnpm lint            # typecheck, prose-lint, shared files, go vet
 pnpm test            # go test and Vitest
-pnpm check           # lint and test (run by pre-push, through loadslot when installed)
+pnpm check           # lint and test (run by pre-push, through hostslot when installed)
 ```
 
 - CI runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles, and checks TypeScript, prose, the PR title and secrets

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryusenkei-inc/loadslot/internal/setup"
+	"github.com/ryusenkei-inc/hostslot/internal/setup"
 )
 
 func TestHookCheck(t *testing.T) {
@@ -24,7 +24,7 @@ func TestHookCheck(t *testing.T) {
 	if c, ok := hookCheck(setup.Claude, exe); !ok || c.Level != "warn" || !strings.Contains(c.Text, "not registered") {
 		t.Fatalf("unregistered: %+v %v", c, ok)
 	}
-	if _, err := setup.Register(settings, setup.Claude, setup.HookCommand(filepath.Join(dir, "gone", "loadslot"), setup.Claude), false, false); err != nil {
+	if _, err := setup.Register(settings, setup.Claude, setup.HookCommand(filepath.Join(dir, "gone", "hostslot"), setup.Claude), false, false); err != nil {
 		t.Fatal(err)
 	}
 	if c, _ := hookCheck(setup.Claude, exe); c.Level != "error" || !strings.Contains(c.Text, "does not exist") {
@@ -66,21 +66,22 @@ func TestSetupReportMarshalsForIntegrations(t *testing.T) {
 	}
 }
 
-func TestLegacyCheckFindsTheFormerName(t *testing.T) {
+func TestLegacyChecksFindTheFormerNames(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("PATH", dir)
-	if _, ok := legacyCheck(); ok {
-		t.Fatal("warned without a jobgate on the PATH")
+	if got := legacyChecks(); len(got) != 0 {
+		t.Fatalf("warned without a former name on the PATH: %+v", got)
 	}
-	name := "jobgate"
-	if runtime.GOOS == "windows" {
-		name += ".exe"
+	for _, name := range []string{"loadslot", "jobgate"} {
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	c, ok := legacyCheck()
-	if !ok || c.Level != "warn" || c.Title == "" || !strings.Contains(c.Detail, dir) {
-		t.Fatalf("got %+v %v", c, ok)
+	got := legacyChecks()
+	if len(got) != 2 || got[0].Title != "An old copy named loadslot is on the PATH" || !strings.Contains(got[1].Detail, dir) {
+		t.Fatalf("got %+v", got)
 	}
 }

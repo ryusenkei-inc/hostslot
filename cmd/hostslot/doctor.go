@@ -9,12 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/ryusenkei-inc/loadslot/internal/daemon"
-	"github.com/ryusenkei-inc/loadslot/internal/platform"
-	"github.com/ryusenkei-inc/loadslot/internal/setup"
+	"github.com/ryusenkei-inc/hostslot/internal/daemon"
+	"github.com/ryusenkei-inc/hostslot/internal/platform"
+	"github.com/ryusenkei-inc/hostslot/internal/setup"
 )
 
-// check is one line of `loadslot doctor`.
+// check is one line of `hostslot doctor`.
 type check struct {
 	Level string `json:"level"` // ok, info, warn, error
 	Text  string `json:"text"`
@@ -30,7 +30,7 @@ type check struct {
 // agentNames are the agents as people know them.
 var agentNames = map[setup.Agent]string{setup.Claude: "Claude Code", setup.Codex: "Codex"}
 
-// cmdDoctor reports whether loadslot is installed and wired up, with the fix
+// cmdDoctor reports whether hostslot is installed and wired up, with the fix
 // for each problem. It exits 1 when there are warnings or errors.
 func cmdDoctor(args []string) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
@@ -47,9 +47,7 @@ func cmdDoctor(args []string) int {
 	}
 	checks := []check{{Level: "ok", Text: version() + " at " + exe}}
 	checks = append(checks, pathCheck(exe))
-	if c, ok := legacyCheck(); ok {
-		checks = append(checks, c)
-	}
+	checks = append(checks, legacyChecks()...)
 	if p, err := nativePlatform(); err == nil {
 		checks = append(checks, daemonCheck(p))
 	} else {
@@ -61,9 +59,9 @@ func cmdDoctor(args []string) int {
 			checks = append(checks, c)
 		}
 	}
-	if os.Getenv("LOADSLOT_DISABLE") == "1" {
-		checks = append(checks, check{Level: "warn", Text: "LOADSLOT_DISABLE=1 is set: commands run without the gate",
-			Title: "loadslot is turned off", Detail: "LOADSLOT_DISABLE=1 is set, so commands run without the gate."})
+	if disabled() {
+		checks = append(checks, check{Level: "warn", Text: "HOSTSLOT_DISABLE=1 is set: commands run without the gate",
+			Title: "Hostslot is turned off", Detail: "HOSTSLOT_DISABLE=1 is set, so commands run without the gate."})
 	}
 	if *asJSON {
 		code := 0
@@ -81,39 +79,45 @@ func cmdDoctor(args []string) int {
 }
 
 func pathCheck(exe string) check {
-	onPath, err := exec.LookPath("loadslot")
+	onPath, err := exec.LookPath("hostslot")
 	if err != nil {
-		return check{Level: "info", Text: "loadslot is not on the PATH. Hooks use absolute paths and work anyway; add its directory to the PATH to run loadslot yourself"}
+		return check{Level: "info", Text: "hostslot is not on the PATH. Hooks use absolute paths and work anyway; add its directory to the PATH to run hostslot yourself"}
 	}
 	if sameFile(onPath, exe) {
 		return check{Level: "ok", Text: "on the PATH as " + onPath}
 	}
 	// Typical after updating from the Orca panel over a copy installed by
 	// hand: the plugin installs into its own directory.
-	return check{Level: "warn", Text: fmt.Sprintf("loadslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe)),
-		Title: "Another loadslot is on the PATH", Detail: fmt.Sprintf("%s runs in terminals. Delete it and add %s to the PATH.", onPath, filepath.Dir(exe))}
+	return check{Level: "warn", Text: fmt.Sprintf("hostslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe)),
+		Title: "Another hostslot executable is on the PATH", Detail: fmt.Sprintf("%s runs in terminals. Delete it and add %s to the PATH.", onPath, filepath.Dir(exe))}
 }
 
-// legacyCheck finds a copy under loadslot's former name: scripts that fall
-// back to `jobgate` when `loadslot` isn't on their PATH would start an old
-// daemon with it.
-func legacyCheck() (check, bool) {
-	old, err := exec.LookPath("jobgate")
-	if err != nil {
-		return check{}, false
+// formerNames are what hostslot was called before.
+var formerNames = []string{"loadslot", "jobgate"}
+
+// legacyChecks find copies under a former name: scripts that fall back to
+// one when `hostslot` isn't on their PATH would start an old daemon with it.
+func legacyChecks() []check {
+	var checks []check
+	for _, name := range formerNames {
+		old, err := exec.LookPath(name)
+		if err != nil {
+			continue
+		}
+		checks = append(checks, check{Level: "warn", Text: fmt.Sprintf("%s, hostslot's former name, is on the PATH (%s); scripts that fall back to it start an old daemon. Delete it", name, old),
+			Title: "An old copy named " + name + " is on the PATH", Detail: fmt.Sprintf("Scripts that fall back to it start an old daemon. Delete %s.", old)})
 	}
-	return check{Level: "warn", Text: fmt.Sprintf("jobgate, loadslot's former name, is on the PATH (%s); scripts that fall back to it start an old daemon. Delete it", old),
-		Title: "An old copy named jobgate is on the PATH", Detail: fmt.Sprintf("Scripts that fall back to it start an old daemon. Delete %s.", old)}, true
+	return checks
 }
 
 func daemonCheck(p *platform.Platform) check {
 	s, err := daemon.QueryStatus(p)
 	if err != nil {
-		return check{Level: "info", Text: "daemon not running; the next loadslot run starts it"}
+		return check{Level: "info", Text: "daemon not running; the next hostslot run starts it"}
 	}
 	text := fmt.Sprintf("daemon pid %d %s, slots %d/%d used, %d MB free", s.PID, s.Version, s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB)
 	if daemon.Older(s.Version, daemon.Version()) {
-		return check{Level: "warn", Text: text + ": older than this loadslot; the next loadslot run retires it", Fix: "setup",
+		return check{Level: "warn", Text: text + ": older than this hostslot; the next hostslot run retires it", Fix: "setup",
 			Title: "An older daemon is running", Detail: fmt.Sprintf("%s (pid %d). The next heavy command replaces it.", s.Version, s.PID)}
 	}
 	return check{Level: "ok", Text: text}
@@ -136,19 +140,19 @@ func hookCheck(a setup.Agent, exe string) (check, bool) {
 	case !found && !setup.Detected(a):
 		return check{}, false
 	case !found:
-		return check{Level: "warn", Text: fmt.Sprintf("%s: hook not registered in %s. Run: loadslot setup", a, file), Fix: "setup",
-			Title: name + " isn't connected", Detail: "No loadslot hook in " + file + "."}, true
+		return check{Level: "warn", Text: fmt.Sprintf("%s: hook not registered in %s. Run: hostslot setup", a, file), Fix: "setup",
+			Title: name + " isn't connected", Detail: "No Hostslot hook in " + file + "."}, true
 	}
 	hookExe := filepath.FromSlash(setup.HookExe(command, a))
 	if _, err := os.Stat(hookExe); err != nil {
 		if _, lookErr := exec.LookPath(hookExe); lookErr != nil {
-			return check{Level: "error", Text: fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: loadslot setup", a, hookExe), Fix: "setup",
+			return check{Level: "error", Text: fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: hostslot setup", a, hookExe), Fix: "setup",
 				Title: name + "'s hook points to a missing file", Detail: hookExe + " doesn't exist."}, true
 		}
 	}
 	if resolved, err := exec.LookPath(hookExe); err == nil && !sameFile(resolved, exe) {
-		return check{Level: "warn", Text: fmt.Sprintf("%s: the hook runs another loadslot (%s). Run: loadslot setup", a, hookExe), Fix: "setup",
-			Title: name + "'s hook runs another loadslot", Detail: hookExe + "."}, true
+		return check{Level: "warn", Text: fmt.Sprintf("%s: the hook runs another hostslot (%s). Run: hostslot setup", a, hookExe), Fix: "setup",
+			Title: name + "'s hook runs another hostslot executable", Detail: hookExe + "."}, true
 	}
 	return check{Level: "ok", Text: fmt.Sprintf("%s: hook registered in %s", a, file)}, true
 }

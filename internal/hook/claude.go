@@ -1,5 +1,5 @@
 // Package hook rewrites the commands of coding agents to run through
-// loadslot. It only transforms text; it never runs anything.
+// hostslot. It only transforms text; it never runs anything.
 package hook
 
 import (
@@ -30,10 +30,10 @@ var DefaultHeavy = regexp.MustCompile(`^(?:` +
 type ClaudeOptions struct {
 	// Heavy matches the commands to gate (DefaultHeavy when nil).
 	Heavy *regexp.Regexp
-	// Weight is passed to `loadslot run --weight` (1 when below 1).
+	// Weight is passed to `hostslot run --weight` (1 when below 1).
 	Weight int
-	// Exe is the loadslot executable the rewritten command runs ("loadslot"
-	// from the PATH when empty). An absolute path works without loadslot on
+	// Exe is the hostslot executable the rewritten command runs ("hostslot"
+	// from the PATH when empty). An absolute path works without hostslot on
 	// the PATH and skips shims, which cost hundreds of milliseconds a call.
 	Exe string
 }
@@ -46,7 +46,7 @@ type claudeInput struct {
 
 // Claude reads a Claude Code PreToolUse event from in and, when it is a
 // Bash call with a heavy command, writes a response that replaces the
-// command with `loadslot run ... -- sh -c '<command>'`. Other events produce
+// command with `hostslot run ... -- sh -c '<command>'`. Other events produce
 // no output, which leaves the call unchanged.
 func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 	var ev claudeInput
@@ -91,7 +91,7 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 // (DefaultHeavy when nil), as their words joined by spaces. The line is
 // parsed as Bash, so text in quotes, heredocs and comments never counts as
 // a command, and `sh -c` / `bash -c` scripts are looked into. A line that
-// runs loadslot itself, sets LOADSLOT_DISABLE=1 or does not parse has no heavy
+// runs hostslot itself, sets HOSTSLOT_DISABLE=1 or does not parse has no heavy
 // commands: the hook then leaves it alone rather than guess.
 func Heavy(line string, heavy *regexp.Regexp) []string {
 	return heavyCommands(line, heavy, nil, 0)
@@ -103,10 +103,8 @@ func heavyCommands(line string, heavy *regexp.Regexp, scripts packageScripts, ho
 	if heavy == nil {
 		heavy = DefaultHeavy
 	}
-	// The same opt-out as for loadslot run, written into the line itself. A
-	// text match may also skip a line that only mentions it, which is the
-	// safe side.
-	if strings.Contains(line, "LOADSLOT_DISABLE=1") {
+	// The same opt-out as for hostslot run, written into the line itself.
+	if disabledIn(line) {
 		return nil
 	}
 	commands, ok := simpleCommands(line, 0)
@@ -115,7 +113,7 @@ func heavyCommands(line string, heavy *regexp.Regexp, scripts packageScripts, ho
 	}
 	var found []string
 	for _, words := range commands {
-		if words[0] == "loadslot" {
+		if isSelf(words[0]) {
 			return nil
 		}
 		c := strings.Join(words, " ")
@@ -214,7 +212,7 @@ func shellScript(args []*syntax.Word) (string, bool) {
 	return literal(args[2])
 }
 
-// Wrap returns line as one loadslot job of Claude Code that learns as label.
+// Wrap returns line as one hostslot job of Claude Code that learns as label.
 // Agents are not at a terminal, so the job runs at background priority.
 func Wrap(exe, line, label string, weight int, b Budget) string {
 	run := shellExe(exe) + " run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --source claude --as " + shellQuote(label)
@@ -279,10 +277,23 @@ func claudeBudget(asked time.Duration) (b Budget, toolTimeout time.Duration) {
 	return Budget{MaxWait: claudeMaxTimeout - run, Timeout: run}, claudeMaxTimeout
 }
 
+// disabledIn reports whether line turns the gate off, also under the former
+// name loadslot. A text match may also skip a line that only mentions it,
+// which is the safe side.
+func disabledIn(line string) bool {
+	return strings.Contains(line, "HOSTSLOT_DISABLE=1") || strings.Contains(line, "LOADSLOT_DISABLE=1")
+}
+
+// isSelf reports whether a command runs hostslot itself, or a former name, so
+// a line wrapped by an older version is not wrapped again.
+func isSelf(word string) bool {
+	return word == "hostslot" || word == "loadslot" || word == "jobgate"
+}
+
 // shellExe is exe for a POSIX shell line; the plain name stays unquoted.
 func shellExe(exe string) string {
-	if exe == "" || exe == "loadslot" {
-		return "loadslot"
+	if exe == "" || exe == "hostslot" {
+		return "hostslot"
 	}
 	return shellQuote(filepath.ToSlash(exe))
 }

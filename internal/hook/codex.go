@@ -14,9 +14,9 @@ import (
 type CodexOptions struct {
 	// Heavy matches the commands to gate (DefaultHeavy when nil).
 	Heavy *regexp.Regexp
-	// Weight is passed to `loadslot run --weight` (1 when below 1).
+	// Weight is passed to `hostslot run --weight` (1 when below 1).
 	Weight int
-	// Exe is the loadslot executable the rewritten command runs ("loadslot"
+	// Exe is the hostslot executable the rewritten command runs ("hostslot"
 	// from the PATH when empty).
 	Exe string
 	// PowerShell is set on Windows, where Codex runs commands in PowerShell:
@@ -32,14 +32,14 @@ type codexInput struct {
 }
 
 // Codex reads a Codex PreToolUse event from in and, when it is a shell call
-// with heavy commands, writes a response that puts `loadslot run … --` before
+// with heavy commands, writes a response that puts `hostslot run … --` before
 // each of them, as Claude does. Codex applies a rewrite only together with
 // an "allow" decision, which may also skip its approval of the call, so the
 // hook rewrites only in sessions that never ask for approval
 // (permission_mode "bypassPermissions"); elsewhere it leaves the call alone
 // rather than approve commands on the user's behalf.
 //
-// Inside Codex's sandbox loadslot may not reach its daemon (on Windows the
+// Inside Codex's sandbox hostslot may not reach its daemon (on Windows the
 // sandbox is another user); the command then runs ungated, unchanged.
 func Codex(in io.Reader, out io.Writer, o CodexOptions) error {
 	var ev codexInput
@@ -67,7 +67,7 @@ func Codex(in io.Reader, out io.Writer, o CodexOptions) error {
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":            "PreToolUse",
 			"permissionDecision":       "allow",
-			"permissionDecisionReason": "loadslot: waits for room on this machine before running " + strings.Join(labels, ", "),
+			"permissionDecisionReason": "hostslot: waits for room on this machine before running " + strings.Join(labels, ", "),
 			"updatedInput":             input,
 		},
 	})
@@ -81,8 +81,8 @@ func codexPrefix(exe, label string, weight int, powerShell bool) string {
 		return shellExe(exe) + args + shellQuote(label) + " -- "
 	}
 	// A quoted path is a string to PowerShell; the call operator runs it.
-	call := "loadslot"
-	if exe != "" && exe != "loadslot" {
+	call := "hostslot"
+	if exe != "" && exe != "hostslot" {
 		call = "& " + powerShellQuote(filepath.ToSlash(exe))
 	}
 	return call + args + powerShellQuote(label) + " -- "

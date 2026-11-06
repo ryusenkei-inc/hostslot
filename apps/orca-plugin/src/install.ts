@@ -1,4 +1,4 @@
-// Installs the loadslot release that matches the plugin's version, for
+// Installs the hostslot release that matches the plugin's version, for
 // people who start from Orca without a terminal. The person starts it from
 // the panel; nothing is written before that.
 import { createHash } from 'node:crypto';
@@ -9,7 +9,7 @@ import type { Problem } from './status.ts';
 import { older } from './version.ts';
 import type { SetupAction } from './view.ts';
 
-const releases = 'https://github.com/ryusenkei-inc/loadslot/releases/download';
+const releases = 'https://github.com/ryusenkei-inc/hostslot/releases/download';
 const DOWNLOAD_MS = 120_000;
 
 /**
@@ -20,23 +20,23 @@ export function assetName(version: string, platform: string = process.platform, 
   const os = { win32: 'windows', darwin: 'darwin', linux: 'linux' }[platform as string];
   const cpu = { x64: 'amd64', arm64: 'arm64' }[arch as string];
   if (!os || !cpu) return undefined;
-  return `loadslot_${version}_${os}_${cpu}${os === 'windows' ? '.exe' : ''}`;
+  return `hostslot_${version}_${os}_${cpu}${os === 'windows' ? '.exe' : ''}`;
 }
 
-/** loadslot's data directory, as the CLI resolves it (internal/platform/paths.go). */
+/** hostslot's data directory, as the CLI resolves it (internal/platform/paths.go). */
 export function dataDir(env: NodeJS.ProcessEnv = process.env, home = homedir(), platform = process.platform): string {
-  if (env.LOADSLOT_HOME) return env.LOADSLOT_HOME;
-  if (platform === 'win32') return join(env.LOCALAPPDATA || join(home, 'AppData', 'Local'), 'loadslot');
-  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'loadslot');
-  return join(env.XDG_DATA_HOME || join(home, '.local', 'share'), 'loadslot');
+  if (env.HOSTSLOT_HOME) return env.HOSTSLOT_HOME;
+  if (platform === 'win32') return join(env.LOCALAPPDATA || join(home, 'AppData', 'Local'), 'hostslot');
+  if (platform === 'darwin') return join(home, 'Library', 'Application Support', 'hostslot');
+  return join(env.XDG_DATA_HOME || join(home, '.local', 'share'), 'hostslot');
 }
 
 /**
- * Where the plugin installs loadslot: a `bin` folder in its data directory,
+ * Where the plugin installs hostslot: a `bin` folder in its data directory,
  * apart from copies people installed themselves.
  */
 export function installedPath(env: NodeJS.ProcessEnv = process.env, home = homedir(), platform = process.platform): string {
-  return join(dataDir(env, home, platform), 'bin', platform === 'win32' ? 'loadslot.exe' : 'loadslot');
+  return join(dataDir(env, home, platform), 'bin', platform === 'win32' ? 'hostslot.exe' : 'hostslot');
 }
 
 /** The SHA-256 of each file in a GoReleaser `checksums.txt`. */
@@ -50,7 +50,7 @@ export function parseChecksums(text: string): Map<string, string> {
 }
 
 /**
- * The one button to offer: installing the plugin's own version when loadslot
+ * The one button to offer: installing the plugin's own version when hostslot
  * is missing or older (and a release exists for this OS), which also runs
  * setup; otherwise setup when `doctor` says it fixes a problem.
  */
@@ -67,12 +67,12 @@ export function offer(o: {
   if (o.plugin && assetName(o.plugin, o.platform, o.arch) && (!o.found || outdated)) {
     return {
       request: 'install',
-      label: outdated ? `Update loadslot to ${o.plugin}` : `Install loadslot ${o.plugin}`,
+      label: outdated ? `Update Hostslot to ${o.plugin}` : `Install Hostslot ${o.plugin}`,
       note: `Downloads it from GitHub to ${o.target}, checks it against the release's checksums, then connects your agents.`,
     };
   }
   if (o.found && o.problems.some((p) => p.fix === 'setup')) {
-    return { request: 'setup', label: 'Fix with loadslot setup', note: 'Connects your agents and replaces an older daemon.' };
+    return { request: 'setup', label: 'Fix with hostslot setup', note: 'Connects your agents and replaces an older daemon.' };
   }
   return undefined;
 }
@@ -86,9 +86,9 @@ const setupResults: Record<string, string> = {
 };
 
 /**
- * The items of `loadslot setup --json` output, and the step left to the
+ * The items of `hostslot setup --json` output, and the step left to the
  * person: Codex runs a new or changed hook only after it is trusted.
- * Output that isn't JSON (an older loadslot) becomes one item.
+ * Output that isn't JSON (an older hostslot) becomes one item.
  */
 export function setupItems(out: string): { items: { label: string; value: string }[]; next?: string } {
   let report: { agents?: { agent: string; result: string }[]; retired?: boolean };
@@ -102,7 +102,7 @@ export function setupItems(out: string): { items: { label: string; value: string
   if (items.length === 0) items.push({ label: 'Agents', value: 'none found (Claude Code, Codex)' });
   if (report.retired) items.push({ label: 'Daemon', value: 'older one retired; the next run starts this version' });
   const codexChanged = agents.some((a) => a.agent === 'codex' && (a.result === 'added' || a.result === 'updated'));
-  return codexChanged ? { items, next: 'Open Codex and trust the loadslot hook with /hooks. Until then Codex skips it.' } : { items };
+  return codexChanged ? { items, next: 'Open Codex and trust the Hostslot hook with /hooks. Until then Codex skips it.' } : { items };
 }
 
 type Fetch = (url: string) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer>; text(): Promise<string> }>;
@@ -116,21 +116,21 @@ export type InstallOptions = {
 };
 
 /**
- * Downloads loadslot `version` for this OS and CPU from GitHub Releases,
+ * Downloads hostslot `version` for this OS and CPU from GitHub Releases,
  * checks it against the release's `checksums.txt`, and puts it at `target`.
- * A running loadslot keeps its file open on Windows, so an existing one is
+ * A running hostslot keeps its file open on Windows, so an existing one is
  * moved aside first (its daemon goes on until it is retired).
  */
 export async function install(o: InstallOptions): Promise<string> {
   const get = o.fetch ?? ((url: string) => fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_MS) }));
   const name = assetName(o.version, o.platform, o.arch);
-  if (!name) throw new Error(`no loadslot release for ${o.platform ?? process.platform}/${o.arch ?? process.arch}`);
+  if (!name) throw new Error(`no Hostslot release for ${o.platform ?? process.platform}/${o.arch ?? process.arch}`);
   const base = `${releases}/v${o.version}`;
 
   const sums = await get(`${base}/checksums.txt`);
   if (sums.status === 404) {
     // A tag's release takes a few minutes to build, so a plugin update can come first.
-    throw new Error(`loadslot ${o.version} is not released on GitHub yet. Try again in a few minutes.`);
+    throw new Error(`Hostslot ${o.version} is not released on GitHub yet. Try again in a few minutes.`);
   }
   if (!sums.ok) throw new Error(`checksums.txt of v${o.version}: HTTP ${sums.status}`);
   const expected = parseChecksums(await sums.text()).get(name);

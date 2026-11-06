@@ -40,14 +40,14 @@ func TestIsHeavy(t *testing.T) {
 		"ls tests",
 		"pnpm testing-library",
 		"go mod tidy",
-		"loadslot run -- pnpm test",
+		"hostslot run -- pnpm test",
 		"",
 		"python - <<'EOF'\nprint('pnpm test')\nEOF",
 		`node -e 'p.scripts.test="go test ./... && vitest run"'`,
 		`echo "a | pnpm test"`,
 		"git log # pnpm test",
 		"pnpm test 'unclosed",
-		"LOADSLOT_DISABLE=1 go test ./...",
+		"HOSTSLOT_DISABLE=1 go test ./...",
 	}
 	for _, c := range heavy {
 		if len(Heavy(c, nil)) == 0 {
@@ -94,7 +94,7 @@ func TestClaudeRewritesHeavyBash(t *testing.T) {
 		t.Fatalf("%v: %s", err, out.String())
 	}
 	got := res.HookSpecificOutput
-	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "loadslot run --weight 2 --priority background --source claude --as 'pnpm test' --max-wait 1m0s --timeout 9m0s -- pnpm test" {
+	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "hostslot run --weight 2 --priority background --source claude --as 'pnpm test' --max-wait 1m0s --timeout 9m0s -- pnpm test" {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 	if got.UpdatedInput["timeout"] != float64(600000) {
@@ -125,7 +125,7 @@ func TestWrapQuotesForSh(t *testing.T) {
 	}
 	line := `printf '%s\n' "it's" $HOME`
 	wrapped := Wrap("", line, "x", 1, Budget{})
-	inner := strings.TrimPrefix(wrapped, "loadslot run --weight 1 --priority background --source claude --as 'x' -- sh -c ")
+	inner := strings.TrimPrefix(wrapped, "hostslot run --weight 1 --priority background --source claude --as 'x' -- sh -c ")
 	// The quoted argument must reach sh as the original line.
 	out, err := exec.Command("sh", "-c", "printf '%s' "+inner).Output()
 	if err != nil {
@@ -166,8 +166,8 @@ func TestClaudeBackgroundCallsHaveNoBudget(t *testing.T) {
 }
 
 func TestWrapRunsTheGivenExecutable(t *testing.T) {
-	got := Wrap(filepath.Join("/opt", "job gate", "loadslot"), "pnpm test", "pnpm test", 1, Budget{})
-	if !strings.HasPrefix(got, "'/opt/job gate/loadslot' run --weight 1 ") {
+	got := Wrap(filepath.Join("/opt", "job gate", "hostslot"), "pnpm test", "pnpm test", 1, Budget{})
+	if !strings.HasPrefix(got, "'/opt/job gate/hostslot' run --weight 1 ") {
 		t.Fatalf("got %s", got)
 	}
 }

@@ -20,12 +20,12 @@ const job = {
 
 group('summarize', () => {
   it('shows slots and free memory when idle', () => {
-    expect(summarize(base)).toMatchObject({ text: 'loadslot 0/4 · 8.0 GB free', tone: 'neutral', icon: 'gauge' });
+    expect(summarize(base)).toMatchObject({ text: 'Hostslot 0/4 · 8.0 GB free', tone: 'neutral', icon: 'gauge' });
   });
 
   it('warns when jobs wait', () => {
     const s = { ...base, snapshot: { ...base.snapshot, used: 4, running: [job], waiting: [job] } };
-    expect(summarize(s)).toMatchObject({ text: 'loadslot 4/4 · 1 waiting · 8.0 GB free', tone: 'warning' });
+    expect(summarize(s)).toMatchObject({ text: 'Hostslot 4/4 · 1 waiting · 8.0 GB free', tone: 'warning' });
   });
 
   it('turns red when memory is nearly gone', () => {
@@ -53,16 +53,16 @@ group('describe', () => {
   });
 });
 
-it('tells how to install loadslot when it is missing', () => {
-  const item = unavailable('loadslot: not found on PATH');
+it('tells how to install hostslot when it is missing', () => {
+  const item = unavailable('hostslot: not found on PATH');
   expect(item.tone).toBe('warning');
-  expect(item.tooltip).toContain('https://github.com/ryusenkei-inc/loadslot#install');
+  expect(item.tooltip).toContain('https://github.com/ryusenkei-inc/hostslot#quick-start');
 });
 
 it('warns in the status bar when the setup has problems', () => {
   const problem = {
     level: 'error' as const,
-    text: 'codex: the hook runs C:/x/loadslot.exe, which does not exist',
+    text: 'codex: the hook runs C:/x/hostslot.exe, which does not exist',
     title: "Codex's hook points to a missing file",
   };
   const item = summarize({ ...base, room: 4 }, [problem]);

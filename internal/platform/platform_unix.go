@@ -170,9 +170,9 @@ type socketIPC struct{ path string }
 // Socket paths are limited to about 104 bytes on macOS, so a long home
 // falls back to a hashed name in the temp directory.
 func newIPC(p Paths) IPC {
-	path := filepath.Join(p.Runtime, "loadslot.sock")
+	path := filepath.Join(p.Runtime, "hostslot.sock")
 	if len(path) > 100 {
-		path = filepath.Join(os.TempDir(), "loadslot-"+instanceID(p.Data)+".sock")
+		path = filepath.Join(os.TempDir(), "hostslot-"+instanceID(p.Data)+".sock")
 	}
 	return socketIPC{path: path}
 }

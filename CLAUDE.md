@@ -1,6 +1,10 @@
 # CLAUDE.md
 
-loadslot（重いジョブの実行をマシン全体で調整する CLI と、その Orca のプラグイン）。構成・コマンドは [README.md](README.md)
+Hostslot（並列のエージェントが1台のマシンで取り合う資源のスケジューラーの CLI と、その Orca のプラグイン）。構成・コマンドは [README.md](README.md)
+
+- 表記: 文章・UI の製品名は Hostslot、コマンド・コード・パス・パッケージは `hostslot`
+- 旧名: v0.7.0 までの loadslot、v0.2.0 までの jobgate
+  - 移行の処理を維持: フック・データ・環境変数・PATH の警告
 
 ## このリポの規約
 
@@ -9,7 +13,7 @@ loadslot（重いジョブの実行をマシン全体で調整する CLI と、�
 - 英語: README・issue・PR のタイトルと本文・コミットメッセージ・コードのコメント（共通の規約の「日本語」より優先）
   - prose-lint の `commit/subject-ja`: `prose-lint.json` で無効化
 - 構成: ルートに CLI の Go のモジュール、`apps/*` に TypeScript のパッケージ（pnpm のワークスペース）
-  - Go のモジュールはルートから移動しない（`go install …/cmd/loadslot@latest` と `v*` のタグを維持）
+  - Go のモジュールはルートから移動しない（`go install …/cmd/hostslot@latest` と `v*` のタグを維持）
 - Orca のプラグイン: マニフェストはリポの直下の `orca-plugin.json`、コードは `apps/orca-plugin`
   - 実行時の依存なし（Orca が TypeScript をそのまま読み込む）
   - リリース: `orca-plugin.json` の `version` をタグ（`vX.Y.Z`）と同じ値に更新

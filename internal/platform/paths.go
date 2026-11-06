@@ -6,7 +6,7 @@ import (
 	"runtime"
 )
 
-// Paths are the directories loadslot writes to.
+// Paths are the directories hostslot writes to.
 type Paths struct {
 	// Data holds config.json, samples.json and daemon.log.
 	Data string
@@ -15,9 +15,9 @@ type Paths struct {
 }
 
 // DefaultPaths resolves the per-user directories of the running OS.
-// LOADSLOT_HOME overrides both, which also isolates the IPC endpoint.
+// HOSTSLOT_HOME overrides both, which also isolates the IPC endpoint.
 func DefaultPaths() (Paths, error) {
-	if home := os.Getenv("LOADSLOT_HOME"); home != "" {
+	if home := os.Getenv("HOSTSLOT_HOME"); home != "" {
 		abs, err := filepath.Abs(home)
 		if err != nil {
 			return Paths{}, err
@@ -34,19 +34,19 @@ func DefaultPaths() (Paths, error) {
 		if base == "" {
 			base = filepath.Join(home, "AppData", "Local")
 		}
-		dir := filepath.Join(base, "loadslot")
+		dir := filepath.Join(base, "hostslot")
 		return Paths{Data: dir, Runtime: dir}, nil
 	case "darwin":
-		dir := filepath.Join(home, "Library", "Application Support", "loadslot")
+		dir := filepath.Join(home, "Library", "Application Support", "hostslot")
 		return Paths{Data: dir, Runtime: dir}, nil
 	default:
 		data := os.Getenv("XDG_DATA_HOME")
 		if data == "" {
 			data = filepath.Join(home, ".local", "share")
 		}
-		p := Paths{Data: filepath.Join(data, "loadslot")}
+		p := Paths{Data: filepath.Join(data, "hostslot")}
 		if rt := os.Getenv("XDG_RUNTIME_DIR"); rt != "" {
-			p.Runtime = filepath.Join(rt, "loadslot")
+			p.Runtime = filepath.Join(rt, "hostslot")
 		} else {
 			p.Runtime = p.Data
 		}
@@ -68,23 +68,28 @@ func (p Paths) Ensure() error {
 	return nil
 }
 
-// legacyFiles are carried over from the data directory of jobgate, the
-// former name, so learned costs and settings survive the rename.
+// legacyFiles are carried over from the data directory of a former name,
+// so learned costs and settings survive the rename.
 var legacyFiles = []string{"config.json", "samples.json"}
 
-// migrateLegacy copies legacyFiles from a sibling "jobgate" directory into a
-// newly created default data directory. Errors are ignored: the files only
-// save relearning.
+// legacyDirs are the data directories of the former names, newest first.
+var legacyDirs = []string{"loadslot", "jobgate"}
+
+// migrateLegacy copies each of legacyFiles from the newest sibling directory
+// of a former name that has it into a newly created default data directory.
+// Errors are ignored: the files only save relearning.
 func migrateLegacy(data string) {
-	if filepath.Base(data) != "loadslot" {
+	if filepath.Base(data) != "hostslot" {
 		return
 	}
-	legacy := filepath.Join(filepath.Dir(data), "jobgate")
 	for _, name := range legacyFiles {
-		b, err := os.ReadFile(filepath.Join(legacy, name))
-		if err != nil {
-			continue
+		for _, dir := range legacyDirs {
+			b, err := os.ReadFile(filepath.Join(filepath.Dir(data), dir, name))
+			if err != nil {
+				continue
+			}
+			_ = os.WriteFile(filepath.Join(data, name), b, 0o600)
+			break
 		}
-		_ = os.WriteFile(filepath.Join(data, name), b, 0o600)
 	}
 }

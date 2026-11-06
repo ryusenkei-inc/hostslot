@@ -1,5 +1,5 @@
 {
-  "name": "@loadslot/orca-plugin",
+  "name": "@hostslot/orca-plugin",
   "private": true,
   "type": "module",
   "scripts": {

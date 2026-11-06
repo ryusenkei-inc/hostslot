@@ -9,9 +9,9 @@ package daemon
 import (
 	"time"
 
-	"github.com/ryusenkei-inc/loadslot/internal/gate"
-	"github.com/ryusenkei-inc/loadslot/internal/platform"
-	"github.com/ryusenkei-inc/loadslot/internal/store"
+	"github.com/ryusenkei-inc/hostslot/internal/gate"
+	"github.com/ryusenkei-inc/hostslot/internal/platform"
+	"github.com/ryusenkei-inc/hostslot/internal/store"
 )
 
 // Client operations.
@@ -69,7 +69,7 @@ type Finished struct {
 	Ended   time.Time `json:"ended"`
 }
 
-// Status describes the gate for `loadslot status`.
+// Status describes the gate for `hostslot status`.
 type Status struct {
 	Mode     string                `json:"mode"`
 	PID      int                   `json:"pid,omitempty"`
