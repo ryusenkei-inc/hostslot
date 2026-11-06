@@ -22,6 +22,7 @@ import (
 	"github.com/ryusenkei-inc/jobgate/internal/hook"
 	"github.com/ryusenkei-inc/jobgate/internal/platform"
 	"github.com/ryusenkei-inc/jobgate/internal/runner"
+	"github.com/ryusenkei-inc/jobgate/internal/setup"
 	"github.com/ryusenkei-inc/jobgate/internal/store"
 )
 
@@ -33,6 +34,7 @@ Usage:
   jobgate status [--json]
   jobgate daemon
   jobgate hook claude [--weight N] [--match REGEX]
+  jobgate setup claude [--remove] [--dry-run] [--settings PATH]
   jobgate version
 
 Environment:
@@ -63,6 +65,8 @@ func run(args []string) int {
 		return cmdDaemon(args[1:])
 	case "hook":
 		return cmdHook(args[1:])
+	case "setup":
+		return cmdSetup(args[1:])
 	case "version", "--version":
 		fmt.Println(version())
 		return 0
@@ -190,6 +194,55 @@ func cmdHook(args []string) int {
 		fmt.Fprintf(os.Stderr, "jobgate hook: %v\n", err)
 		return 1
 	}
+	return 0
+}
+
+func cmdSetup(args []string) int {
+	if len(args) == 0 || args[0] != "claude" {
+		fmt.Fprintln(os.Stderr, "jobgate setup: missing agent (jobgate setup claude)")
+		return 2
+	}
+	fs := flag.NewFlagSet("setup claude", flag.ContinueOnError)
+	remove := fs.Bool("remove", false, "remove jobgate's hook instead of adding it")
+	dryRun := fs.Bool("dry-run", false, "report what would change without writing")
+	path := fs.String("settings", "", "settings file (default: Claude Code's user settings)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if *path == "" {
+		p, err := setup.ClaudeSettingsPath()
+		if err != nil {
+			return fail(err)
+		}
+		*path = p
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return fail(err)
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	// A `go run` binary is deleted when it exits, which would leave a hook
+	// that fails on every Bash call.
+	if !*remove && strings.Contains(filepath.ToSlash(exe), "/go-build") {
+		return fail(errors.New("run setup from an installed jobgate, not `go run`"))
+	}
+	command := setup.HookCommand(exe)
+	res, err := setup.Claude(*path, command, *remove, *dryRun)
+	if err != nil {
+		return fail(err)
+	}
+	verb := map[setup.Result]string{
+		setup.Unchanged: "already up to date",
+		setup.Added:     "added the PreToolUse hook `" + command + "`",
+		setup.Updated:   "updated the PreToolUse hook to `" + command + "`",
+		setup.Removed:   "removed jobgate's PreToolUse hook",
+	}[res]
+	if *dryRun && res != setup.Unchanged {
+		verb = "would have " + verb
+	}
+	fmt.Printf("%s: %s\n", *path, verb)
 	return 0
 }
 
