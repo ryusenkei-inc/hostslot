@@ -62,11 +62,33 @@ func TestRetireFreesTheLockAndWaitsForJobs(t *testing.T) {
 	if !RetireOlder(p, "v0.2.0") {
 		t.Fatal("the older daemon was not retired")
 	}
-	unlock, ok, err := p.Locks.TryLock(DaemonLock)
-	if err != nil || !ok {
-		t.Fatalf("daemon lock still held after retiring: %v %v", ok, err)
+	// A new daemon starts while the retired one still serves its job (on
+	// Windows, the old pipe's instances are still open).
+	next := &Server{
+		Metrics:    srv.Metrics,
+		Alive:      srv.Alive,
+		Store:      srv.Store,
+		LoadConfig: srv.LoadConfig,
+		Interval:   srv.Interval,
+		Version:    "v0.2.0",
 	}
-	unlock()
+	nextDone := make(chan error, 1)
+	go func() { nextDone <- Run(p, next) }()
+	deadline = time.Now().Add(5 * time.Second)
+	for {
+		if s, err := QueryStatus(p); err == nil && s.Version == "v0.2.0" {
+			break
+		}
+		select {
+		case err := <-nextDone:
+			t.Fatalf("new daemon could not start next to the retired one: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("clients do not reach the new daemon")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	select {
 	case <-done:
 		t.Fatal("retired daemon exited while a job was running")
@@ -80,5 +102,13 @@ func TestRetireFreesTheLockAndWaitsForJobs(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("retired daemon did not exit after its last job")
+	}
+	if !RetireOlder(p, "v0.3.0") {
+		t.Fatal("could not stop the new daemon")
+	}
+	select {
+	case <-nextDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("new daemon did not exit")
 	}
 }
