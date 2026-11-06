@@ -107,8 +107,8 @@ func TestClaudeCreatesMissingFileAndDryRun(t *testing.T) {
 }
 
 func TestHookCommandQuotesSpaces(t *testing.T) {
-	cmd := HookCommand(`C:\Program Files\jobgate\jobgate.exe`)
-	if cmd != `"C:/Program Files/jobgate/jobgate.exe" hook claude` {
+	cmd := HookCommand(filepath.Join("/opt", "my tools", "jobgate"))
+	if cmd != `"/opt/my tools/jobgate" hook claude` {
 		t.Fatalf("got %s", cmd)
 	}
 	if _, ours := jobgateCommand([]byte(`{"hooks":[{"command":` + quote(cmd) + `}]}`)); !ours {
