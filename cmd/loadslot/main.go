@@ -31,7 +31,8 @@ const usage = `loadslot: a machine-wide gate for heavy local jobs
 
 Usage:
   loadslot run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
-              [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
+              [--max-wait DURATION] [--timeout DURATION] [--max-memory MB] [--keep-children]
+              -- <command> [args...]
   loadslot status [--json]
   loadslot daemon
   loadslot hook claude [--weight N] [--match REGEX]
@@ -111,6 +112,7 @@ func cmdRun(args []string) int {
 	maxWait := fs.Duration("max-wait", 0, "give up waiting for a slot after this long and exit 75 (0 = wait forever)")
 	timeout := fs.Duration("timeout", 0, "stop the command after it has run this long and exit 124 (0 = none)")
 	keepChildren := fs.Bool("keep-children", false, "leave processes the command started running after it exits")
+	maxMemory := fs.Uint64("max-memory", 0, "stop the command when it uses more MB and exit 77 (default: jobCeilingFraction of total memory)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -138,6 +140,7 @@ func cmdRun(args []string) int {
 		MaxWait:      *maxWait,
 		Timeout:      *timeout,
 		KeepChildren: *keepChildren,
+		MaxMemoryMB:  *maxMemory,
 		Weight:       *weight,
 		Priority:     priority,
 		Dir:          dir,

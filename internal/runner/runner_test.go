@@ -29,6 +29,18 @@ func TestMain(m *testing.M) {
 	case "sleep":
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
+	case "grow":
+		// A runaway: 32 MB more every 100 ms for up to 10 s.
+		var keep [][]byte
+		for range 100 {
+			buf := make([]byte, 32<<20)
+			for i := 0; i < len(buf); i += 4096 {
+				buf[i] = 1
+			}
+			keep = append(keep, buf)
+			time.Sleep(100 * time.Millisecond)
+		}
+		os.Exit(len(keep) - 100)
 	case "touch":
 		os.WriteFile(os.Getenv("LOADSLOT_TEST_MARKER"), nil, 0o600)
 		os.Exit(0)
@@ -245,5 +257,25 @@ func TestJobContext(t *testing.T) {
 	}
 	if ctx := jobContext(func(string) string { return "" }); ctx != nil {
 		t.Fatalf("empty environment gave %v", ctx)
+	}
+}
+
+func TestRunStopsARunawayAtItsCeiling(t *testing.T) {
+	p, o, out := setup(t, "grow")
+	o.MaxMemoryMB = 150
+	start := time.Now()
+	code, err := Run(p, o)
+	if err != nil || code != ExitOverMemory {
+		t.Fatalf("code %d err %v, output %s", code, err, out)
+	}
+	if time.Since(start) > 8*time.Second {
+		t.Fatalf("stopped late: %s", time.Since(start))
+	}
+	if !strings.Contains(out.String(), "memory ceiling of 150 MB") {
+		t.Fatalf("message: %s", out)
+	}
+	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
+	if peaks := st.Peaks(jobkey.For(o.Dir, o.Args[0])); len(peaks) != 1 || peaks[0] < 150 {
+		t.Fatalf("the stopped run's peak was not kept: %v", peaks)
 	}
 }

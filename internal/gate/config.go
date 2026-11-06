@@ -12,6 +12,9 @@ import (
 type Config struct {
 	// MemoryFraction is the share of total memory that heavy jobs may use.
 	MemoryFraction float64 `json:"memoryFraction,omitempty"`
+	// JobCeilingFraction is the share of total memory one job may use before
+	// it is stopped as a runaway. 1 or more turns the ceiling off.
+	JobCeilingFraction float64 `json:"jobCeilingFraction,omitempty"`
 	// ReserveMB is kept free for the editor, browsers and agents themselves.
 	ReserveMB uint64 `json:"reserveMB,omitempty"`
 	// CostMB is the assumed peak memory of a weight-1 job without samples.
@@ -29,11 +32,12 @@ type Config struct {
 // DefaultConfig returns the built-in defaults.
 func DefaultConfig() Config {
 	return Config{
-		MemoryFraction: 0.6,
-		ReserveMB:      1024,
-		CostMB:         2048,
-		MinSamples:     3,
-		Warmup:         15 * time.Second,
+		MemoryFraction:     0.6,
+		JobCeilingFraction: 0.75,
+		ReserveMB:          1024,
+		CostMB:             2048,
+		MinSamples:         3,
+		Warmup:             15 * time.Second,
 	}
 }
 
@@ -42,6 +46,9 @@ func (c Config) Normalize() Config {
 	d := DefaultConfig()
 	if c.MemoryFraction <= 0 || c.MemoryFraction > 1 {
 		c.MemoryFraction = d.MemoryFraction
+	}
+	if c.JobCeilingFraction <= 0 {
+		c.JobCeilingFraction = d.JobCeilingFraction
 	}
 	if c.ReserveMB == 0 {
 		c.ReserveMB = d.ReserveMB
@@ -72,6 +79,16 @@ func Slots(totalMB uint64, cpus int, c Config) int {
 		n = cpus
 	}
 	return max(n, 1)
+}
+
+// Ceiling is the memory one job may use on a machine with totalMB, or 0
+// when the ceiling is off.
+func Ceiling(totalMB uint64, c Config) uint64 {
+	c = c.Normalize()
+	if c.JobCeilingFraction >= 1 {
+		return 0
+	}
+	return uint64(float64(totalMB) * c.JobCeilingFraction)
 }
 
 // Estimate returns the expected peak memory and the effective weight of a
