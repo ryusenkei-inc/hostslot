@@ -7,7 +7,8 @@ import (
 
 type fakeEstimator map[string][]uint64
 
-func (f fakeEstimator) Peaks(key string) []uint64 { return f[key] }
+func (f fakeEstimator) Peaks(key string) []uint64   { return f[key] }
+func (f fakeEstimator) Prior(string) (uint64, bool) { return 0, false }
 
 var t0 = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
@@ -37,19 +38,19 @@ func TestSlots(t *testing.T) {
 
 func TestEstimateUsesWeightUntilEnoughSamples(t *testing.T) {
 	c := cfg()
-	if est, w := Estimate(nil, 2, 8, c); est != 2000 || w != 2 {
+	if est, w := Estimate(nil, 0, 2, 8, c); est != 2000 || w != 2 {
 		t.Fatalf("no samples: got %d MB weight %d", est, w)
 	}
 	// A large early peak raises the estimate above the hint.
-	if est, w := Estimate([]uint64{3500}, 1, 8, c); est != 3500 || w != 4 {
+	if est, w := Estimate([]uint64{3500}, 0, 1, 8, c); est != 3500 || w != 4 {
 		t.Fatalf("one large sample: got %d MB weight %d", est, w)
 	}
 	// With enough samples, a small learned peak replaces a pessimistic hint.
-	if est, w := Estimate([]uint64{300, 400, 350}, 3, 8, c); est != 400 || w != 1 {
+	if est, w := Estimate([]uint64{300, 400, 350}, 0, 3, 8, c); est != 400 || w != 1 {
 		t.Fatalf("learned: got %d MB weight %d", est, w)
 	}
 	// Effective weight never exceeds the slot count.
-	if _, w := Estimate([]uint64{9000, 9000, 9000}, 1, 4, c); w != 4 {
+	if _, w := Estimate([]uint64{9000, 9000, 9000}, 0, 1, 4, c); w != 4 {
 		t.Fatalf("clamp: weight %d", w)
 	}
 }
@@ -222,5 +223,37 @@ func TestRoom(t *testing.T) {
 	s.Enqueue(Request{Command: "b", Weight: 9}, t0)
 	if got := s.Room(t0, 100000); got != 0 {
 		t.Fatalf("with a job waiting: %d", got)
+	}
+}
+
+func TestEstimateUsesThePriorUntilLearned(t *testing.T) {
+	c := cfg()
+	// A prior from similar work replaces the default cost of a weight-1 job.
+	if est, w := Estimate(nil, 3500, 1, 8, c); est != 3500 || w != 4 {
+		t.Fatalf("prior: %d %d", est, w)
+	}
+	if est, _ := Estimate(nil, 400, 1, 8, c); est != 400 {
+		t.Fatalf("light prior: %d", est)
+	}
+	// An explicit weight above 1 still sets a floor.
+	if est, _ := Estimate(nil, 400, 3, 8, c); est != 3000 {
+		t.Fatalf("explicit weight: %d", est)
+	}
+	// A peak seen before enough samples raises it.
+	if est, _ := Estimate([]uint64{5000}, 400, 1, 8, c); est != 5000 {
+		t.Fatalf("early peak: %d", est)
+	}
+}
+
+func TestEstimateUsesAHighPercentileOnceLearned(t *testing.T) {
+	c := cfg()
+	// One cold outlier among warm runs: the second highest of ten decides.
+	peaks := []uint64{2400, 2400, 2500, 2400, 9000, 2400, 2450, 2400, 2500, 2400}
+	if est, _ := Estimate(peaks, 0, 1, 8, c); est != 2500 {
+		t.Fatalf("got %d, want 2500", est)
+	}
+	// With few samples the high percentile is the maximum.
+	if est, _ := Estimate([]uint64{100, 9000, 200}, 0, 1, 8, c); est != 9000 {
+		t.Fatalf("few samples: %d", est)
 	}
 }

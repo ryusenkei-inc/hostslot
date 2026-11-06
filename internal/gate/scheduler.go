@@ -74,9 +74,11 @@ type Job struct {
 	Reported  bool   `json:"reported,omitempty"`
 }
 
-// Estimator returns the recent peaks recorded for a key.
+// Estimator returns the recent peaks recorded for a key, and a prior from
+// similar work for a key without enough of them.
 type Estimator interface {
 	Peaks(key string) []uint64
+	Prior(key string) (uint64, bool)
 }
 
 // Snapshot is a copy of the scheduler state for status output.
@@ -110,10 +112,12 @@ func (s *Scheduler) SetSlots(n int) { s.slots = max(n, 1) }
 func (s *Scheduler) Enqueue(r Request, now time.Time) *Job {
 	s.seq++
 	var peaks []uint64
+	var prior uint64
 	if s.est != nil {
 		peaks = s.est.Peaks(r.Key())
+		prior, _ = s.est.Prior(r.Key())
 	}
-	est, w := Estimate(peaks, r.Weight, s.slots, s.cfg)
+	est, w := Estimate(peaks, prior, r.Weight, s.slots, s.cfg)
 	j := &Job{Request: r, ID: s.seq, EstimateMB: est, Slots: w, Samples: len(peaks), Queued: now}
 	s.waiting = append(s.waiting, j)
 	// Stable sort keeps FIFO order within a priority.

@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -62,6 +64,67 @@ func (s *Store) Peaks(key string) []uint64 {
 		out = append(out, x.PeakMB)
 	}
 	return out
+}
+
+// Prior estimates the peak memory of a key that has no samples yet, from
+// keys of similar work: the same command elsewhere (another repository or
+// directory), else the same tool and subcommand (`cargo test`), else the same
+// tool (`cargo`). It is the median of those keys' highest recent peaks. Keys
+// of the old format (before learning keys named a repository and a label)
+// hold whole command lines and are ignored.
+func (s *Store) Prior(key string) (uint64, bool) {
+	words := strings.Fields(label(key))
+	if len(words) == 0 {
+		return 0, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var groups [3][]uint64
+	for k, list := range s.data {
+		if k == key || len(list) == 0 || !(strings.HasPrefix(k, "git:") || strings.HasPrefix(k, "dir:")) {
+			continue
+		}
+		other := strings.Fields(label(k))
+		level := similarity(words, other)
+		if level < 0 {
+			continue
+		}
+		var peak uint64
+		for _, x := range list {
+			peak = max(peak, x.PeakMB)
+		}
+		groups[level] = append(groups[level], peak)
+	}
+	for _, g := range groups {
+		if len(g) > 0 {
+			slices.Sort(g)
+			return g[len(g)/2], true
+		}
+	}
+	return 0, false
+}
+
+// label is the last line of a learning key: the name of the work.
+func label(key string) string {
+	if i := strings.LastIndexByte(key, '\n'); i >= 0 {
+		return key[i+1:]
+	}
+	return key
+}
+
+// similarity is 0 for the same command, 1 for the same tool and subcommand,
+// 2 for the same tool, and -1 otherwise.
+func similarity(a, b []string) int {
+	switch {
+	case len(b) == 0 || a[0] != b[0]:
+		return -1
+	case slices.Equal(a, b):
+		return 0
+	case len(a) > 1 && len(b) > 1 && a[1] == b[1]:
+		return 1
+	default:
+		return 2
+	}
 }
 
 // Record appends a sample and writes the file. It rereads the file first so

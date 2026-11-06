@@ -75,7 +75,8 @@ func acquireLocks(p *platform.Platform, cfg gate.Config, req gate.Request, deadl
 	cpus := p.Metrics.CPUs()
 	slots := gate.Slots(mem.TotalMB, cpus, cfg)
 	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
-	est, weight := gate.Estimate(st.Peaks(req.Key()), req.Weight, slots, cfg)
+	prior, _ := st.Prior(req.Key())
+	est, weight := gate.Estimate(st.Peaks(req.Key()), prior, req.Weight, slots, cfg)
 	job := gate.Job{Request: req, EstimateMB: est, Slots: weight, Started: time.Now()}
 
 	var last time.Time
