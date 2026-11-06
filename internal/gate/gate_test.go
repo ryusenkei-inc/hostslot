@@ -192,3 +192,15 @@ func TestWorkers(t *testing.T) {
 		t.Fatalf("workers floor %d", w)
 	}
 }
+
+func TestCeiling(t *testing.T) {
+	if got := Ceiling(16000, Config{}); got != 12000 {
+		t.Fatalf("default: %d", got)
+	}
+	if got := Ceiling(16000, Config{JobCeilingFraction: 0.5}); got != 8000 {
+		t.Fatalf("half: %d", got)
+	}
+	if got := Ceiling(16000, Config{JobCeilingFraction: 1}); got != 0 {
+		t.Fatalf("off: %d", got)
+	}
+}

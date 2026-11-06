@@ -55,6 +55,9 @@ type Options struct {
 	// KeepChildren leaves processes the command started running after it
 	// exits; by default they are stopped.
 	KeepChildren bool
+	// MaxMemoryMB stops the command's process tree when it uses more and
+	// exits with ExitOverMemory (0: the configured share of total memory).
+	MaxMemoryMB uint64
 }
 
 // Exit codes of loadslot itself.
@@ -63,6 +66,8 @@ const (
 	ExitBusy = 75
 	// ExitTimeout: the command ran longer than Timeout (as GNU timeout).
 	ExitTimeout = 124
+	// ExitOverMemory: the command used more memory than its ceiling.
+	ExitOverMemory = 77
 )
 
 // JobVar marks the environment of a gated command, so loadslot runs nested
@@ -82,8 +87,8 @@ func Run(p *platform.Platform, o Options) (int, error) {
 		return 2, errors.New("no command")
 	}
 	if o.Disable || o.Nested {
-		code, _, err := execute(p, o, os.Environ(), nil, nil)
-		return code, err
+		res, err := execute(p, o, os.Environ(), watch{})
+		return res.code, err
 	}
 	cfg, err := config.Load(p.Paths.Data)
 	if err != nil {
@@ -119,15 +124,15 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	workers := gate.Workers(l.cpus, l.job.Slots, l.slots)
 	env := append(withWorkers(os.Environ(), workers), JobVar+"=1")
 	start := time.Now()
-	var peak uint64
-	code, timedOut, err := execute(p, o, env, &peak, l.report)
-	sample := &store.Sample{PeakMB: peak, DurationMS: time.Since(start).Milliseconds(), ExitCode: code, At: time.Now()}
-	// A killed run's peak is only a lower bound of its cost.
-	if err != nil || timedOut {
+	res, err := execute(p, o, env, watch{report: l.report, ceilingMB: ceiling(p, cfg, o)})
+	sample := &store.Sample{PeakMB: res.peakMB, DurationMS: time.Since(start).Milliseconds(), ExitCode: res.code, At: time.Now()}
+	// A run stopped by its timeout says little about its cost; one stopped by
+	// the ceiling is kept, since its peak shows it needs at least that much.
+	if err != nil || res.timedOut {
 		sample = nil
 	}
 	l.release(sample)
-	return code, err
+	return res.code, err
 }
 
 // ContextVars are the environment variables recorded with a job, so an
@@ -172,9 +177,41 @@ func withWorkers(env []string, workers int) []string {
 // usageEvery is how often a running job reports its memory to the daemon.
 const usageEvery = 2 * time.Second
 
-// execute runs the command; timedOut reports that o.Timeout killed it.
-// report, when set, receives the tree's current memory every usageEvery.
-func execute(p *platform.Platform, o Options, env []string, peak *uint64, report func(uint64)) (code int, timedOut bool, err error) {
+// ceilingEvery is how often memory is checked against the ceiling: a runaway
+// test runner can grow by gigabytes a second.
+const ceilingEvery = 500 * time.Millisecond
+
+// watch is what execute observes while the command runs. Zero fields turn
+// the observation off.
+type watch struct {
+	// report receives the tree's current memory every usageEvery.
+	report func(currentMB uint64)
+	// ceilingMB stops the tree when its current memory passes it.
+	ceilingMB uint64
+}
+
+type result struct {
+	code       int
+	peakMB     uint64
+	timedOut   bool
+	overMemory bool
+}
+
+// ceiling is the job's memory ceiling: --max-memory, or the configured share
+// of total memory.
+func ceiling(p *platform.Platform, cfg gate.Config, o Options) uint64 {
+	if o.MaxMemoryMB > 0 {
+		return o.MaxMemoryMB
+	}
+	m, err := p.Metrics.Memory()
+	if err != nil {
+		return 0
+	}
+	return gate.Ceiling(m.TotalMB, cfg)
+}
+
+// execute runs the command under the watch w.
+func execute(p *platform.Platform, o Options, env []string, w watch) (result, error) {
 	cmd := exec.Command(o.Args[0], o.Args[1:]...)
 	cmd.Dir = o.Dir
 	cmd.Env = env
@@ -192,25 +229,37 @@ func execute(p *platform.Platform, o Options, env []string, peak *uint64, report
 		var notFound *exec.Error
 		if errors.As(err, &notFound) {
 			fmt.Fprintf(o.Stderr, "loadslot: %v\n", err)
-			return 127, false, nil
+			return result{code: 127}, nil
 		}
-		return 1, false, err
+		return result{code: 1}, err
 	}
 	waited := make(chan error, 1)
 	go func() { waited <- proc.Wait() }()
+	var tickers []*time.Ticker
+	defer func() {
+		for _, t := range tickers {
+			t.Stop()
+		}
+	}()
+	tick := func(enabled bool, every time.Duration) <-chan time.Time {
+		if !enabled {
+			return nil
+		}
+		t := time.NewTicker(every)
+		tickers = append(tickers, t)
+		return t.C
+	}
 	var expired <-chan time.Time
 	if o.Timeout > 0 {
 		t := time.NewTimer(o.Timeout)
 		defer t.Stop()
 		expired = t.C
 	}
-	var usage <-chan time.Time
-	if report != nil {
-		t := time.NewTicker(usageEvery)
-		defer t.Stop()
-		usage = t.C
-	}
+	usage := tick(w.report != nil, usageEvery)
+	check := tick(w.ceilingMB > 0, ceilingEvery)
+	var res result
 	var werr error
+	var overMB uint64
 	signals := 0
 loop:
 	for {
@@ -225,22 +274,31 @@ loop:
 				_ = proc.KillTree()
 			}
 		case <-expired:
-			timedOut = true
+			res.timedOut = true
 			_ = proc.KillTree()
 		case <-usage:
 			if mb := proc.CurrentMB(); mb > 0 {
-				report(mb)
+				w.report(mb)
+			}
+		case <-check:
+			if mb := proc.CurrentMB(); mb > w.ceilingMB && !res.overMemory {
+				res.overMemory, overMB = true, mb
+				_ = proc.KillTree()
 			}
 		}
 	}
-	if peak != nil {
-		*peak = proc.PeakMB()
-	}
-	if timedOut {
+	res.peakMB = proc.PeakMB()
+	switch {
+	case res.overMemory:
+		fmt.Fprintf(o.Stderr, "loadslot: the command used %d MB, over its memory ceiling of %d MB, and was stopped (--max-memory or jobCeilingFraction in config.json to change)\n", overMB, w.ceilingMB)
+		res.code = ExitOverMemory
+	case res.timedOut:
 		fmt.Fprintf(o.Stderr, "loadslot: the command ran longer than %s and was stopped\n", o.Timeout)
-		return ExitTimeout, true, nil
+		res.code = ExitTimeout
+	default:
+		res.code = exitCode(cmd, werr)
 	}
-	return exitCode(cmd, werr), false, nil
+	return res, nil
 }
 
 func exitCode(cmd *exec.Cmd, err error) int {
