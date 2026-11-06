@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "execution": "trusted-worker",
+  "id": "loadslot",
+  "name": "loadslot",
+  "version": "0.4.0",
+  "description": "Machine capacity for parallel agents: how many heavy commands run and wait, and how much memory is free, from loadslot.",
+  "license": "MIT",
+  "engines": { "orca": ">=1.4.248" },
+  "pluginApi": 1,
+  "main": "apps/orca-plugin/src/main.ts",
+  "contributes": {
+    "commands": [{ "id": "status", "title": "loadslot: Show status" }],
+    "statusBarItems": [
+      { "id": "capacity", "text": "loadslot", "icon": "gauge", "tooltip": "loadslot: starting", "command": "status" }
+    ]
+  }
+}

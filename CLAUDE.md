@@ -9,8 +9,9 @@ loadslot（重いジョブの実行をマシン全体で調整する CLI と、�
   - prose-lint の `commit/subject-ja`: `prose-lint.json` で無効化
 - 構成: ルートに CLI の Go のモジュール、`apps/*` に TypeScript のパッケージ（pnpm のワークスペース）
   - Go のモジュールはルートから移動しない（`go install …/cmd/loadslot@latest` と `v*` のタグを維持）
-- `apps/orca-plugin`: 実行時の依存なし（Orca が TypeScript をそのまま読み込む）
-  - パスは固定: 移動すると Orca の上で別のリポの扱い
+- Orca のプラグイン: マニフェストはリポの直下の `orca-plugin.json`、コードは `apps/orca-plugin`
+  - 実行時の依存なし（Orca が TypeScript をそのまま読み込む）
+  - リリース: `orca-plugin.json` の `version` をタグ（`vX.Y.Z`）と同じ値に更新
 - テスト: 対象と同じディレクトリ
   - Go: `testing` の `*_test.go`
   - TypeScript: Vitest の `*.test.ts`
