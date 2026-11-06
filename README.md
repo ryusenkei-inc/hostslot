@@ -40,6 +40,7 @@ jobgate run [--weight N] [--priority interactive|background] [--as LABEL]
 jobgate status [--json]
 jobgate daemon [--idle 10m]
 jobgate hook claude [--weight N] [--match REGEX]
+jobgate setup claude [--remove] [--dry-run] [--settings PATH]
 jobgate version
 ```
 
@@ -52,7 +53,7 @@ jobgate version
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
-- `hook claude` is a Claude Code hook (see [Claude Code](#claude-code)).
+- `hook claude` is a Claude Code hook, and `setup claude` registers it (see [Claude Code](#claude-code)).
 
 Example:
 
@@ -77,7 +78,15 @@ waiting (1)
 
 ### Claude Code
 
-`jobgate hook claude` is a `PreToolUse` hook that rewrites heavy Bash commands to run through jobgate. Register it in `~/.claude/settings.json` to cover every repository:
+`jobgate hook claude` is a `PreToolUse` hook that rewrites heavy Bash commands to run through jobgate. Register it for every repository with:
+
+```sh
+jobgate setup claude            # add or update the hook in Claude Code's user settings
+jobgate setup claude --dry-run  # show what would change
+jobgate setup claude --remove   # remove it
+```
+
+`setup` edits only jobgate's own entry in `~/.claude/settings.json` (or `$CLAUDE_CONFIG_DIR/settings.json`; `--settings` picks another file). Other keys keep their order and other tools' hooks stay as they are; the entry goes after existing `PreToolUse` groups. It points the hook at the running `jobgate` executable, so run it again after moving the binary. The result is equivalent to:
 
 ```json
 {
@@ -180,7 +189,7 @@ Limitations:
 
 | Path | Purpose | Depends on |
 | --- | --- | --- |
-| `cmd/jobgate` | CLI: `run`, `status`, `daemon`, `hook` | `internal/*` |
+| `cmd/jobgate` | CLI: `run`, `status`, `daemon`, `hook`, `setup` | `internal/*` |
 | `internal/gate` | Scheduler core, OS-independent and pure: slots, admission, priority, learning estimates | — |
 | `internal/platform` | OS ports: metrics, process tracking, IPC, locks, paths. One file per OS, selected by build tags | — |
 | `internal/store` | Learning samples in `samples.json` | — |
@@ -188,6 +197,7 @@ Limitations:
 | `internal/config` | `config.json` and environment overrides | `internal/gate` |
 | `internal/daemon` | Daemon and client: admission over IPC, started on demand | `internal/gate`, `internal/platform`, `internal/store` |
 | `internal/hook` | Agent hooks: rewrite heavy commands to `jobgate run`, text only | — |
+| `internal/setup` | Register agent hooks in the agents' settings files, keeping other entries and key order | — |
 | `internal/runner` | `jobgate run`: acquire (daemon or lock fallback), run, release, record | all of the above |
 | `apps/` | TypeScript packages in a pnpm workspace, such as the Orca plugin (`apps/orca-plugin`) | the `jobgate` CLI |
 | `scripts/` | Repository operations, such as managing `.env` | — |
