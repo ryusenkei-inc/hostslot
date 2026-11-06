@@ -48,7 +48,7 @@ type Request struct {
 	// Source names who started the job, such as an agent ("claude").
 	Source string `json:"source,omitempty"`
 	// Context carries environment variables that tie the job to a place in
-	// another tool, such as an Orca pane, for integrations to show.
+	// another tool, such as an agent IDE's pane, for integrations to show.
 	Context map[string]string `json:"context,omitempty"`
 }
 

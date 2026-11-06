@@ -18,8 +18,8 @@ import (
 type check struct {
 	Level string `json:"level"` // ok, info, warn, error
 	Text  string `json:"text"`
-	// Fix names the command that fixes the problem ("setup"), so the Orca
-	// plugin can offer to run it.
+	// Fix names the command that fixes the problem ("setup"), so an
+	// integration can offer to run it.
 	Fix string `json:"fix,omitempty"`
 	// Title and Detail say a warning or error briefly, for a panel; Text
 	// is the full line for the terminal.
@@ -34,7 +34,7 @@ var agentNames = map[setup.Agent]string{setup.Claude: "Claude Code", setup.Codex
 // for each problem. It exits 1 when there are warnings or errors.
 func cmdDoctor(args []string) int {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
-	asJSON := fs.Bool("json", false, "print the checks as JSON (for integrations such as the Orca plugin)")
+	asJSON := fs.Bool("json", false, "print the checks as JSON (for integrations such as IDE plugins)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -85,8 +85,8 @@ func pathCheck(exe string) check {
 	if sameFile(onPath, exe) {
 		return check{Level: "ok", Text: "on the PATH as " + onPath}
 	}
-	// Typical after updating from the Orca panel over a copy installed by
-	// hand: the plugin installs into its own directory.
+	// Typical after an IDE plugin updated over a copy installed by hand: the
+	// plugin installs into its own directory.
 	return check{Level: "warn", Text: fmt.Sprintf("hostslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe)),
 		Title: "Another hostslot executable is on the PATH", Detail: fmt.Sprintf("%s runs in terminals. Delete it and add %s to the PATH.", onPath, filepath.Dir(exe))}
 }

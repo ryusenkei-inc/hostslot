@@ -133,23 +133,6 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	return res.code, err
 }
 
-// ContextVars are the environment variables recorded with a job, so an
-// integration can tell where it came from (Orca sets these in its terminals).
-var ContextVars = []string{"ORCA_PANE_KEY", "ORCA_TAB_ID", "ORCA_WORKTREE_ID"}
-
-func jobContext(getenv func(string) string) map[string]string {
-	var ctx map[string]string
-	for _, k := range ContextVars {
-		if v := getenv(k); v != "" {
-			if ctx == nil {
-				ctx = map[string]string{}
-			}
-			ctx[k] = v
-		}
-	}
-	return ctx
-}
-
 // withWorkers returns env with the inner parallelism variables added.
 func withWorkers(env []string, workers int) []string {
 	has := map[string]bool{}
