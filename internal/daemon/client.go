@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ryusenkei-inc/jobgate/internal/gate"
@@ -73,6 +74,7 @@ func Spawn(p *platform.Platform) error {
 
 // Lease is an admitted job held over an open connection.
 type Lease struct {
+	mu   sync.Mutex
 	conn net.Conn
 	// Job is the admitted job with its estimate and effective weight.
 	Job gate.Job
@@ -120,8 +122,18 @@ func Acquire(c net.Conn, req gate.Request, deadline time.Time, onWait func(Messa
 	}
 }
 
+// Report sends the job's current memory, so admission holds back only what
+// the job may still grow to.
+func (l *Lease) Report(currentMB uint64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	_ = json.NewEncoder(l.conn).Encode(Message{Op: OpUsage, UsageMB: currentMB})
+}
+
 // Release reports the finished run and closes the connection.
 func (l *Lease) Release(sample *store.Sample) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	_ = json.NewEncoder(l.conn).Encode(Message{Op: OpRelease, Sample: sample})
 	l.conn.Close()
 }

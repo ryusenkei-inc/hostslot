@@ -157,3 +157,22 @@ func TestAcquireGivesUpAtTheDeadlineAndLeavesTheQueue(t *testing.T) {
 	}
 	l1.Release(nil)
 }
+
+func TestUsageReportsReachTheScheduler(t *testing.T) {
+	p, _ := startServer(t, 1)
+	ch, _ := acquireAsync(t, p, gate.Request{Command: "build", Dir: "/r", Weight: 1, PID: 1})
+	l := waitLease(t, ch)
+	l.Report(700)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s, err := QueryStatus(p)
+		if err == nil && len(s.Snapshot.Running) == 1 && s.Snapshot.Running[0].Reported && s.Snapshot.Running[0].CurrentMB == 700 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("usage not recorded: %+v %v", s, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	l.Release(nil)
+}

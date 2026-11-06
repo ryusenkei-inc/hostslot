@@ -302,9 +302,13 @@ func printStatus(w io.Writer, s *daemon.Status) {
 			return
 		}
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "  ID\tWEIGHT\tEST MB\tSAMPLES\tPRIORITY\tAGE\tCOMMAND\tDIR")
+		fmt.Fprintln(tw, "  ID\tWEIGHT\tEST MB\tNOW MB\tSAMPLES\tPRIORITY\tAGE\tCOMMAND\tDIR")
 		for _, j := range jobs {
-			fmt.Fprintf(tw, "  %d\t%d\t%d\t%d\t%s\t%s\t%s\t%s\n", j.ID, j.Slots, j.EstimateMB, j.Samples, j.Priority,
+			now := "-"
+			if j.Reported {
+				now = strconv.FormatUint(j.CurrentMB, 10)
+			}
+			fmt.Fprintf(tw, "  %d\t%d\t%d\t%s\t%d\t%s\t%s\t%s\t%s\n", j.ID, j.Slots, j.EstimateMB, now, j.Samples, j.Priority,
 				time.Since(since(j)).Round(time.Second), truncate(j.Command, 60), j.Dir)
 		}
 		tw.Flush()
