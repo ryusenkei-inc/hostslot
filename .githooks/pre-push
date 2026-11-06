@@ -1,0 +1,3 @@
+#!/bin/sh
+# push の前の検査（`check` のスクリプトを持つリポのみ。CI の失敗・Actions の消費を手元で防止）
+exec pnpm run --if-present check
