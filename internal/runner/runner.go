@@ -58,6 +58,9 @@ type Options struct {
 	// MaxMemoryMB stops the command's process tree when it uses more and
 	// exits with ExitOverMemory (0: the configured share of total memory).
 	MaxMemoryMB uint64
+	// Started, when set, is called with the command's process id once it
+	// runs.
+	Started func(pid int)
 }
 
 // Exit codes of hostslot itself.
@@ -234,6 +237,9 @@ func execute(p *platform.Platform, o Options, env []string, w watch) (result, er
 			return result{code: 127}, nil
 		}
 		return result{code: 1}, err
+	}
+	if o.Started != nil {
+		o.Started(proc.Pid())
 	}
 	waited := make(chan error, 1)
 	go func() { waited <- proc.Wait() }()

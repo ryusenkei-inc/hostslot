@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -15,10 +16,11 @@ import (
 )
 
 // How long a dev server may take to listen before serve says it seems not
-// to use the port it was given.
+// to use the port it was given, and how often it looks afterwards.
 const (
 	listenGrace = 30 * time.Second
 	listenPoll  = 2 * time.Second
+	listenEvery = 30 * time.Second
 )
 
 // cmdServe runs a dev server on the port of its service in this worktree.
@@ -78,8 +80,9 @@ func cmdServe(args []string) int {
 		_ = os.Setenv(k, value)
 	}
 	fmt.Fprintf(os.Stderr, "hostslot: %s on http://localhost:%d (PORT=%d)\n", plan.Name, port, port)
-	go warnIfNotListening(port, plan.Name)
 
+	svc := ports.For(dir, plan.Name)
+	w := &watcher{p: p, key: svc.Key, port: port, name: plan.Name, done: make(chan struct{})}
 	code, err := runner.Run(p, runner.Options{
 		Args:    plan.Apply(command, value),
 		Dir:     dir,
@@ -87,11 +90,78 @@ func cmdServe(args []string) int {
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
 		Disable: true,
+		Started: func(pid int) { go w.watch(pid) },
 	})
+	close(w.done)
+	w.record(0, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "hostslot: %v\n", err)
 	}
 	return code
+}
+
+// watcher follows which ports a dev server's process tree listens on,
+// records them for `hostslot port --list` and the Orca panel, and says once
+// when the server doesn't listen on the port it was given.
+type watcher struct {
+	p    *platform.Platform
+	key  string
+	port int
+	name string
+	done chan struct{}
+}
+
+func (w *watcher) watch(pid int) {
+	w.record(os.Getpid(), nil)
+	started := time.Now()
+	warned := false
+	last := ""
+	for {
+		every := listenPoll
+		if time.Since(started) > listenGrace {
+			every = listenEvery
+		}
+		select {
+		case <-w.done:
+			return
+		case <-time.After(every):
+		}
+		listening := platform.ListeningPorts(pid)
+		if key := fmt.Sprint(listening); key != last {
+			w.record(os.Getpid(), listening)
+			last = key
+		}
+		if warned || slices.Contains(listening, w.port) {
+			continue
+		}
+		switch {
+		case len(listening) > 0:
+			fmt.Fprintf(os.Stderr, "hostslot: %s listens on %s, not on %d: agents and tests would miss it. Make it read PORT (or %s), or put {port} in the command\n",
+				w.name, joinPorts(listening), w.port, ports.EnvName(w.name))
+			warned = true
+		case time.Since(started) > listenGrace && ports.Available(w.port):
+			fmt.Fprintf(os.Stderr, "hostslot: nothing listens on %d after %s. If %s uses another port, make it read PORT (or %s), or put {port} in the command\n",
+				w.port, listenGrace, w.name, ports.EnvName(w.name))
+			warned = true
+		}
+	}
+}
+
+func (w *watcher) record(pid int, listening []int) {
+	unlock, err := lockPorts(w.p)
+	if err != nil {
+		return
+	}
+	defer unlock()
+	_ = ports.Open(filepath.Join(w.p.Paths.Data, ports.FileName)).Observe(w.key, pid, listening)
+}
+
+func joinPorts(list []int) string {
+	s := make([]string, len(list))
+	for i, p := range list {
+		s[i] = strconv.Itoa(p)
+	}
+	return strings.Join(s, ", ")
 }
 
 // devContext tells an agent where the dev servers its command starts will
@@ -142,18 +212,4 @@ func holdFixed(p *platform.Platform, port int) error {
 		}
 		time.Sleep(time.Second)
 	}
-}
-
-// warnIfNotListening tells, once, when nothing listens on the port after a
-// while: the app likely ignores PORT and listens elsewhere, so agents and
-// tests would reach another worktree's server.
-func warnIfNotListening(port int, name string) {
-	for waited := time.Duration(0); waited < listenGrace; waited += listenPoll {
-		time.Sleep(listenPoll)
-		if !ports.Available(port) {
-			return
-		}
-	}
-	fmt.Fprintf(os.Stderr, "hostslot: nothing listens on %d after %s. If %s uses another port, make it read PORT (or %s), or put {port} in the command\n",
-		port, listenGrace, name, ports.EnvName(name))
 }

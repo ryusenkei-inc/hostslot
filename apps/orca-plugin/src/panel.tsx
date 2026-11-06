@@ -110,6 +110,40 @@ function Waiting({ v }: { v: View }) {
   );
 }
 
+function DevServers({ v }: { v: View }) {
+  if (v.ports.length === 0) return null;
+  const running = v.ports.filter((p) => p.running);
+  const idle = v.ports.filter((p) => !p.running);
+  return (
+    <Stack gap="sm">
+      <Heading level={2}>Dev servers</Heading>
+      {running.length === 0 ? (
+        <Text muted>None running.</Text>
+      ) : (
+        <List label="Dev servers">
+          {running.map((p) => (
+            <ListItem key={p.key} title={p.name} description={p.where}>
+              <Row gap="sm" wrap>
+                <Link href={p.url}>{p.url}</Link>
+                {p.note ? (
+                  <Text size="sm" tone="warning">
+                    {p.note}
+                  </Text>
+                ) : null}
+              </Row>
+            </ListItem>
+          ))}
+        </List>
+      )}
+      {idle.length > 0 ? (
+        <Collapsible title="Assigned ports" description={`${idle.length} not running`}>
+          <KeyValue label="Assigned ports" items={idle.map((p) => ({ label: `${p.name} · ${p.where}`, value: p.url.replace('http://localhost:', '') }))} />
+        </Collapsible>
+      ) : null}
+    </Stack>
+  );
+}
+
 // A summary per guard; the stopped jobs themselves are rows of Recent.
 function Stops({ v }: { v: View }) {
   if (v.stops.length === 0) return null;
@@ -232,6 +266,7 @@ export default function Panel() {
       <Machine v={v} />
       <Running v={v} />
       <Waiting v={v} />
+      <DevServers v={v} />
       <Stops v={v} />
       <Recent v={v} />
       <Repos v={v} />

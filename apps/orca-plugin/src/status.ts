@@ -35,7 +35,18 @@ export type Finished = {
   ended: string;
 };
 
-/** The output of `hostslot status --json`. */
+/** An assigned dev-server port, from `hostslot port --list --json` (Hostslot 0.10+). */
+export type PortEntry = {
+  key: string;
+  port: number;
+  name: string;
+  worktree: string;
+  running: boolean;
+  /** The ports its process tree was last seen listening on. */
+  listening?: number[];
+};
+
+/** The output of `hostslot status --json`, with the worker's port list. */
 export type Status = {
   mode: string;
   version?: string;
@@ -47,6 +58,7 @@ export type Status = {
   reserveMB?: number;
   ceilingMB?: number;
   recent?: Finished[];
+  ports?: PortEntry[];
 };
 
 /**

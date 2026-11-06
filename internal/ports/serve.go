@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -187,4 +188,39 @@ func contains(list []string, s string) bool {
 		}
 	}
 	return false
+}
+
+// HardCoded is a package script that writes its port into the command.
+type HardCoded struct {
+	Script string
+	Body   string
+	Port   string
+}
+
+var hardPort = regexp.MustCompile(`(?:^|\s)(?:--port[= ]|-p\s+|PORT=)(\d{2,5})(?:\s|$)`)
+
+// HardCodedPorts lists the scripts of the package.json nearest to dir that
+// write a port into their command, other than for tools whose port
+// `hostslot serve` overrides with flags (Vite). Their dev servers can't
+// take the worktree's port.
+func HardCodedPorts(dir string) []HardCoded {
+	pkg := nearestPackage(dir)
+	names := make([]string, 0, len(pkg.Scripts))
+	for name := range pkg.Scripts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []HardCoded
+	for _, name := range names {
+		body := pkg.Scripts[name]
+		m := hardPort.FindStringSubmatch(body)
+		if m == nil {
+			continue
+		}
+		if p := Detect(strings.Fields(body), pkg.dir); p.Tool != nil && len(p.Tool.Flags) > 0 {
+			continue
+		}
+		out = append(out, HardCoded{Script: name, Body: body, Port: m[1]})
+	}
+	return out
 }

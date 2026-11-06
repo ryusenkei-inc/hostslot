@@ -6,7 +6,7 @@
 // happened; which repositories use the machine; is the setup sound. Each
 // fact appears once.
 import { origin } from './origin.ts';
-import type { Job, Problem, Status } from './status.ts';
+import type { Job, PortEntry, Problem, Status } from './status.ts';
 
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 
@@ -50,6 +50,18 @@ export type RecentRow = {
   took: string;
   /** When it ended, ms since the epoch. */
   ended: number;
+};
+
+/** A dev server's port. */
+export type PortRow = {
+  key: string;
+  name: string;
+  /** Repository (and worktree). */
+  where: string;
+  url: string;
+  running: boolean;
+  /** Set when it listens elsewhere than its port. */
+  note?: string;
 };
 
 /** What one guard stopped recently, summed up; each job is a row of Recent. */
@@ -104,6 +116,8 @@ export type View = {
   };
   running: JobRow[];
   waiting: WaitRow[];
+  /** Dev servers' ports, running first. */
+  ports: PortRow[];
   stops: GuardStops[];
   recent: RecentRow[];
   byRepo: { key: string; repo: string; summary: string }[];
@@ -131,6 +145,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
       tone: 'warning',
       running: [],
       waiting: [],
+      ports: [],
       stops: [],
       recent: [],
       byRepo: [],
@@ -210,6 +225,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
         ...(eta === undefined ? {} : { eta: `~${duration(eta)}` }),
       };
     }),
+    ports: portRows(s.ports ?? []),
     stops: guardStops(s, now),
     recent: (s.recent ?? []).map((f, i) => {
       const [label, oTone, detail] = outcomes[f.outcome] ?? [f.outcome, 'neutral', f.outcome];
@@ -243,6 +259,24 @@ function brief(p: Problem, i: number): SetupProblem {
   const tone = p.level === 'error' ? 'danger' : 'warning';
   if (!p.title) return { key: `${i}`, tone, title: p.text };
   return { key: `${i}`, tone, title: p.title, ...(p.detail ? { detail: p.detail } : {}) };
+}
+
+// Hostslot 0.9 listed assignments without key and state; those are skipped.
+function portRows(entries: PortEntry[]): PortRow[] {
+  const rows = entries.filter((e) => typeof e.key === 'string').map((e) => {
+    const [head = '', top = ''] = e.key.split('\n');
+    const where = origin({ key: `${head}\n.\n${e.name}`, dir: top || e.worktree });
+    const elsewhere = e.running && e.listening?.length && !e.listening.includes(e.port);
+    return {
+      key: e.key,
+      name: e.name,
+      where,
+      url: `http://localhost:${e.port}`,
+      running: e.running,
+      ...(elsewhere ? { note: `listens on ${e.listening?.join(', ')}, not ${e.port}: make it read PORT` } : {}),
+    };
+  });
+  return rows.sort((a, b) => Number(b.running) - Number(a.running));
 }
 
 const guards: { outcome: string; title: string; explanation: (s: Status) => string }[] = [

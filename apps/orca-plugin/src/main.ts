@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { install, installedPath, offer, setupItems } from './install.ts';
-import { type Item, type Problem, type Status, summarize, unavailable } from './status.ts';
+import { type Item, type PortEntry, type Problem, type Status, summarize, unavailable } from './status.ts';
 import { older } from './version.ts';
 import { type ActionResult, type Setup, type View, view } from './view.ts';
 
@@ -184,6 +184,13 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   const refresh = async () => {
     last = await status();
+    if (last && found) {
+      // Hostslot before 0.10 has no port list; the panel then shows none.
+      last.ports = await run(found, ['port', '--list', '--json'])
+        .then((out) => JSON.parse(out) as PortEntry[])
+        .catch(() => undefined);
+      if (!last.ports) delete last.ports;
+    }
     const next = last ? `using ${found} (${last.mode} ${last.version ?? ''})`.trim() : `hostslot unavailable: ${reason || 'not found'}`;
     if (next !== state) orca.log((state = next));
     if (found && (found !== checkedFile || polls % DOCTOR_EVERY === 0)) {
