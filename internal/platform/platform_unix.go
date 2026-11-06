@@ -87,7 +87,16 @@ func (p *pollProcess) Wait() error {
 
 func (p *pollProcess) PeakMB() uint64 { return p.peak.Load() }
 
-func (p *pollProcess) CurrentMB() uint64 { return p.current.Load() }
+// CurrentMB checks done itself: the poller may store one more reading after
+// Wait returns.
+func (p *pollProcess) CurrentMB() uint64 {
+	select {
+	case <-p.done:
+		return 0
+	default:
+		return p.current.Load()
+	}
+}
 
 func (p *pollProcess) KillTree() error {
 	_, pids := treeRSS(p.Pid())
