@@ -39,9 +39,13 @@ type Server struct {
 	retire   func()
 	retiring bool
 
-	mu         sync.Mutex
-	sched      *gate.Scheduler
-	grants     map[uint64]chan struct{}
+	mu     sync.Mutex
+	sched  *gate.Scheduler
+	grants map[uint64]chan struct{}
+	// stops are closed to make a running job's connection send TypeStop.
+	stops      map[uint64]chan struct{}
+	lastStop   time.Time
+	reserve    uint64
 	clients    int
 	lastActive time.Time
 	memory     platform.Memory
@@ -88,8 +92,15 @@ func (s *Server) Serve(l net.Listener) error {
 	if err != nil {
 		return err
 	}
-	s.sched = gate.New(cfg, gate.Slots(s.memory.TotalMB, s.Metrics.CPUs(), cfg), s.Store)
+	// A nil *store.Store in the interface would not compare equal to nil.
+	var est gate.Estimator
+	if s.Store != nil {
+		est = s.Store
+	}
+	s.sched = gate.New(cfg, gate.Slots(s.memory.TotalMB, s.Metrics.CPUs(), cfg), est)
 	s.grants = map[uint64]chan struct{}{}
+	s.stops = map[uint64]chan struct{}{}
+	s.reserve = cfg.Normalize().ReserveMB
 	s.lastActive = time.Now()
 
 	stop := make(chan struct{})
@@ -153,7 +164,9 @@ func (s *Server) cycleLocked(full bool) {
 	if full {
 		if cfg, err := s.LoadConfig(); err == nil {
 			s.sched.SetSlots(gate.Slots(s.memory.TotalMB, s.Metrics.CPUs(), cfg))
+			s.reserve = cfg.Normalize().ReserveMB
 		}
+		s.stopLargestLocked()
 		if s.Alive != nil {
 			for _, j := range s.sched.Reap(s.Alive) {
 				delete(s.grants, j.ID)
@@ -165,6 +178,29 @@ func (s *Server) cycleLocked(full bool) {
 			close(ch)
 			delete(s.grants, j.ID)
 		}
+	}
+}
+
+// stopCooldown spaces out stops, so the memory freed by one shows in the
+// reading before another job is chosen.
+const stopCooldown = 10 * time.Second
+
+// stopLargestLocked is the last line of defence: when free memory falls
+// below half the reserve, the largest background job is asked to stop.
+// Jobs under their own ceilings, plus apps outside loadslot, can still use
+// up memory together.
+func (s *Server) stopLargestLocked() {
+	if s.memory.FreeMB >= s.reserve/2 || time.Since(s.lastStop) < stopCooldown {
+		return
+	}
+	id, _, ok := s.sched.Largest()
+	if !ok {
+		return
+	}
+	if ch, found := s.stops[id]; found {
+		close(ch)
+		delete(s.stops, id)
+		s.lastStop = time.Now()
 	}
 }
 
@@ -265,6 +301,7 @@ func (s *Server) serveJob(r *bufio.Reader, enc *json.Encoder, req gate.Request) 
 		s.mu.Lock()
 		s.sched.Remove(job.ID)
 		delete(s.grants, job.ID)
+		delete(s.stops, job.ID)
 		s.cycleLocked(false)
 		s.mu.Unlock()
 		if sample != nil && sample.PeakMB > 0 && s.Store != nil {
@@ -296,14 +333,22 @@ wait:
 			}
 		}
 	}
+	stop := make(chan struct{})
 	s.mu.Lock()
 	grant := *job
+	s.stops[job.ID] = stop
 	s.mu.Unlock()
 	if enc.Encode(Message{Type: TypeGrant, Job: &grant, Status: s.status()}) != nil {
 		done(nil)
 		return
 	}
-	done(<-released)
+	select {
+	case sample := <-released:
+		done(sample)
+	case <-stop:
+		_ = enc.Encode(Message{Type: TypeStop, Status: s.status()})
+		done(<-released)
+	}
 }
 
 func readMessage(r *bufio.Reader, m *Message) error {

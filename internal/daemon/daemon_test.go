@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -175,4 +176,59 @@ func TestUsageReportsReachTheScheduler(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	l.Release(nil)
+}
+
+// dropMetrics reports plenty of free memory until low is set.
+type dropMetrics struct{ low atomic.Bool }
+
+func (d *dropMetrics) Memory() (platform.Memory, error) {
+	if d.low.Load() {
+		return platform.Memory{TotalMB: 16384, FreeMB: 300}, nil
+	}
+	return platform.Memory{TotalMB: 16384, FreeMB: 12000}, nil
+}
+func (d *dropMetrics) CPUs() int { return 8 }
+
+func TestNearlyOutOfMemoryStopsTheLargestBackgroundJob(t *testing.T) {
+	dir := t.TempDir()
+	p := platform.Native(platform.Paths{Data: dir, Runtime: dir})
+	m := &dropMetrics{}
+	srv := &Server{
+		Metrics: m,
+		Alive:   func(int) bool { return true },
+		Store:   store.Open(filepath.Join(dir, "samples.json")),
+		LoadConfig: func() (gate.Config, error) {
+			return gate.Config{Slots: 2, CostMB: 1000, ReserveMB: 1000}.Normalize(), nil
+		},
+		Interval: 20 * time.Millisecond,
+	}
+	l, err := p.IPC.Listen()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go srv.Serve(l)
+	t.Cleanup(func() { l.Close() })
+
+	bg := gate.Request{Command: "build", Dir: "/r", Weight: 1, Priority: gate.Background, PID: 1}
+	ch1, _ := acquireAsync(t, p, bg)
+	small := waitLease(t, ch1)
+	ch2, _ := acquireAsync(t, p, bg)
+	big := waitLease(t, ch2)
+	small.Report(200)
+	big.Report(800)
+	time.Sleep(100 * time.Millisecond)
+
+	m.low.Store(true)
+	select {
+	case <-big.Stopped():
+	case <-time.After(5 * time.Second):
+		t.Fatal("the largest background job was not stopped")
+	}
+	select {
+	case <-small.Stopped():
+		t.Fatal("a second job was stopped within the cooldown")
+	case <-time.After(300 * time.Millisecond):
+	}
+	big.Release(nil)
+	small.Release(nil)
 }

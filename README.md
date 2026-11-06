@@ -61,7 +61,7 @@ loadslot doctor [--json]
 loadslot version
 ```
 
-- `run` waits for admission, printing a status line to stderr every 5 seconds, then runs the command with stdin, stdout and stderr passed through. It exits with the command's exit code (`128 + signal` when killed by a signal, `127` when the command isn't found, `75` when `--max-wait` ran out, `124` when `--timeout` stopped it, `77` when it went over its memory ceiling).
+- `run` waits for admission, printing a status line to stderr every 5 seconds, then runs the command with stdin, stdout and stderr passed through. It exits with the command's exit code (`128 + signal` when killed by a signal, `127` when the command isn't found, `75` when `--max-wait` ran out, `124` when `--timeout` stopped it, `77` when it went over its memory ceiling or was stopped because the machine was nearly out of memory).
 - `--weight` is the expected cost in slots. It only matters until loadslot has learned the command.
 - `--priority` defaults to `interactive` when stdin is a terminal and `background` otherwise.
 - `--as` names the work for learning instead of the command line, e.g. `loadslot run --as "pnpm test" -- sh -c 'pnpm test 2>&1 | tail'`.
@@ -70,6 +70,7 @@ loadslot version
 - Background jobs (agents, scripts) run at a lower OS priority: below-normal priority class on Windows, `nice 10` on Linux and macOS. People's editors and terminals stay responsive; interactive jobs keep normal priority.
 - When the command exits, processes it left running (test workers, browsers) are stopped. `--keep-children` leaves them, for commands that start a daemon on purpose.
 - Memory ceiling: a job whose process tree uses more than `jobCeilingFraction` of total memory (default 75%) is stopped as a runaway, with exit `77` and a message naming the ceiling. `--max-memory 6000` sets it for one run in MB; `jobCeilingFraction` of 1 or more turns it off. The stopped run's peak is still learned, so the next run is admitted with room for it.
+- Last line of defence: when free memory falls below half of `reserveMB`, the daemon stops the largest job running in the background (by its current memory), at most one every 10 seconds. It exits with `77` and a message saying the machine ran out, not the job. Interactive jobs are never chosen.
 - `--source claude` names who started the job (default: `$LOADSLOT_SOURCE`), shown in `status`. The job also records `ORCA_PANE_KEY`, `ORCA_TAB_ID` and `ORCA_WORKTREE_ID` when set, so `status --json` tells which Orca pane a job belongs to.
 - Ctrl+C reaches the command as usual, and loadslot waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated and current memory, source) and waiting jobs. Without a daemon, it shows how many slot locks are held. `room` (in the text and `--json`) is how many more weight-1 jobs would start now: the free slots, limited by free memory after what running jobs may still grow to, and 0 while any job waits.

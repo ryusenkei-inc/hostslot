@@ -124,7 +124,7 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	workers := gate.Workers(l.cpus, l.job.Slots, l.slots)
 	env := append(withWorkers(os.Environ(), workers), JobVar+"=1")
 	start := time.Now()
-	res, err := execute(p, o, env, watch{report: l.report, ceilingMB: ceiling(p, cfg, o)})
+	res, err := execute(p, o, env, watch{report: l.report, ceilingMB: ceiling(p, cfg, o), stop: l.stopped})
 	sample := &store.Sample{PeakMB: res.peakMB, DurationMS: time.Since(start).Milliseconds(), ExitCode: res.code, At: time.Now()}
 	// A run stopped by its timeout says little about its cost; one stopped by
 	// the ceiling is kept, since its peak shows it needs at least that much.
@@ -188,6 +188,9 @@ type watch struct {
 	report func(currentMB uint64)
 	// ceilingMB stops the tree when its current memory passes it.
 	ceilingMB uint64
+	// stop stops the tree when it is closed: the daemon chose this job to
+	// free memory.
+	stop <-chan struct{}
 }
 
 type result struct {
@@ -195,6 +198,8 @@ type result struct {
 	peakMB     uint64
 	timedOut   bool
 	overMemory bool
+	// machineOut: stopped because the machine was nearly out of memory.
+	machineOut bool
 }
 
 // ceiling is the job's memory ceiling: --max-memory, or the configured share
@@ -285,10 +290,17 @@ loop:
 				res.overMemory, overMB = true, mb
 				_ = proc.KillTree()
 			}
+		case <-w.stop:
+			res.machineOut = true
+			w.stop = nil
+			_ = proc.KillTree()
 		}
 	}
 	res.peakMB = proc.PeakMB()
 	switch {
+	case res.machineOut:
+		fmt.Fprintln(o.Stderr, "loadslot: the machine was nearly out of memory and this was the largest job running in the background, so it was stopped; run it again when there is room")
+		res.code = ExitOverMemory
 	case res.overMemory:
 		fmt.Fprintf(o.Stderr, "loadslot: the command used %d MB, over its memory ceiling of %d MB, and was stopped (--max-memory or jobCeilingFraction in config.json to change)\n", overMB, w.ceilingMB)
 		res.code = ExitOverMemory

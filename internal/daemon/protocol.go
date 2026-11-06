@@ -31,6 +31,9 @@ const (
 	TypeError  = "error"
 	// TypeRetired confirms OpRetire.
 	TypeRetired = "retired"
+	// TypeStop asks a client to stop its running job: the machine is nearly
+	// out of memory and the job is the largest in the background.
+	TypeStop = "stop"
 )
 
 // Message is the single envelope for both directions.
