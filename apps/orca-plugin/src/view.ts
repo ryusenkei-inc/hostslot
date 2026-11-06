@@ -203,7 +203,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
         position: i + 1,
         title: title(j),
         detail: detail(j),
-        why: why(j, freeMB, s.snapshot.heldMB ?? 0, i),
+        why: why(j, freeMB, s.snapshot.heldMB ?? 0, s.reserveMB ?? 0, i),
         since: time(j.queued, now),
         ...(eta === undefined ? {} : { eta: `~${duration(eta)}` }),
       };
@@ -264,11 +264,11 @@ function guardStops(s: Status, now: number): GuardGroup[] {
 }
 
 // Memory as admission sees it: free memory minus what running jobs may
-// still grow to.
-function why(j: Job, freeMB: number, heldMB: number, i: number): string {
+// still grow to and the reserve kept for apps.
+function why(j: Job, freeMB: number, heldMB: number, reserveMB: number, i: number): string {
   if (j.reason === 'queue' || (j.reason === undefined && i > 0)) return `behind #${i}`;
   if (j.reason === 'slots') return 'all slots busy';
-  const available = Math.max(0, freeMB - heldMB);
+  const available = Math.max(0, freeMB - heldMB - reserveMB);
   return `needs ~${size(j.estimateMB)}, ${size(available)} available`;
 }
 

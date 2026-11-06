@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net"
 	"os"
 	"slices"
+	"strconv"
 	"sync"
 	"time"
 
@@ -218,7 +221,19 @@ func (s *Server) stopLargestLocked() {
 		close(ch)
 		delete(s.stops, id)
 		s.lastStop = time.Now()
+		// To daemon.log, for tuning admission when stops repeat.
+		log.Printf("stopped %s (%d MB): %d MB free of %d MB, below half the %d MB reserve",
+			s.commandOf(id), mb, s.memory.FreeMB, s.memory.TotalMB, s.reserve)
 	}
+}
+
+func (s *Server) commandOf(id uint64) string {
+	for _, j := range s.sched.Snapshot().Running {
+		if j.ID == id {
+			return strconv.Quote(j.Command)
+		}
+	}
+	return fmt.Sprintf("job %d", id)
 }
 
 func (s *Server) status() *Status {

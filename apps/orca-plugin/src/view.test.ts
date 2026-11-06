@@ -62,8 +62,8 @@ it('says when a job runs longer than usual, and why a job waits for memory', () 
   const slow = { ...job, started: '2026-11-06T10:00:00Z' };
   const v = view(status({}, { used: 1, heldMB: 7000, running: [slow], waiting: [{ ...job, id: 8, reason: 'memory' }] }), '', [], 0, now);
   expect(v.running[0]?.left).toBe('longer than usual');
-  // 8 GB free, but 6.8 GB of it is held for the running job.
-  expect(v.waiting[0]?.why).toBe('needs ~2.0 GB, 1.2 GB available');
+  // 8 GB free, but 6.8 GB of it is held for the running job and 1 GB is kept for apps.
+  expect(v.waiting[0]?.why).toBe('needs ~2.0 GB, 168 MB available');
 });
 
 it('lists recent jobs, with stops by a guard called out', () => {

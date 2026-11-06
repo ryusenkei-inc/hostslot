@@ -195,7 +195,10 @@ func (s *Scheduler) Admit(now time.Time, freeMB uint64) []*Job {
 			if used+j.Slots > s.slots {
 				break
 			}
-			if freeMB < reserved+j.EstimateMB {
+			// ReserveMB stays free for the editor, browsers and the agents
+			// themselves. Admitting up to the last megabyte would only leave
+			// the machine guard to stop the job again.
+			if freeMB < reserved+j.EstimateMB+s.cfg.ReserveMB {
 				break
 			}
 		}
@@ -210,8 +213,8 @@ func (s *Scheduler) Admit(now time.Time, freeMB uint64) []*Job {
 }
 
 // Room is how many more weight-1 jobs would be admitted now: the free slots,
-// and the free memory left after what running jobs may still grow to, in
-// units of the default job cost. Waiting jobs come first, so there is no room
+// and the free memory left after what running jobs may still grow to and
+// the reserve, in units of the default job cost. Waiting jobs come first, so there is no room
 // while any wait.
 func (s *Scheduler) Room(now time.Time, freeMB uint64) int {
 	if len(s.waiting) > 0 {
@@ -225,10 +228,10 @@ func (s *Scheduler) Room(now time.Time, freeMB uint64) int {
 	for _, j := range s.running {
 		reserved += s.reserve(j, now)
 	}
-	if freeMB <= reserved {
+	if freeMB <= reserved+s.cfg.ReserveMB {
 		return 0
 	}
-	byMemory := int((freeMB - reserved) / s.cfg.CostMB)
+	byMemory := int((freeMB - reserved - s.cfg.ReserveMB) / s.cfg.CostMB)
 	return max(min(slots, byMemory), 0)
 }
 
