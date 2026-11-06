@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -165,8 +166,8 @@ func TestClaudeBackgroundCallsHaveNoBudget(t *testing.T) {
 }
 
 func TestWrapRunsTheGivenExecutable(t *testing.T) {
-	got := Wrap(`C:\tools\job gate\jobgate.exe`, "pnpm test", "pnpm test", 1, Budget{})
-	if !strings.HasPrefix(got, "'C:/tools/job gate/jobgate.exe' run --weight 1 ") {
+	got := Wrap(filepath.Join("/opt", "job gate", "jobgate"), "pnpm test", "pnpm test", 1, Budget{})
+	if !strings.HasPrefix(got, "'/opt/job gate/jobgate' run --weight 1 ") {
 		t.Fatalf("got %s", got)
 	}
 }
