@@ -192,7 +192,7 @@ The data directory holds `config.json`, `samples.json` (the last 10 peaks per co
 | CPUs | `runtime.NumCPU`, limited by cgroup v2 `cpu.max` | `runtime.NumCPU` | `runtime.NumCPU` |
 | Peak and current memory of the process tree | Sum of resident memory over `/proc`, polled every 250 ms, plus `ru_maxrss` | Sum of resident memory from `ps`, polled every 250 ms, plus `ru_maxrss` | Job Object peak and current committed memory |
 | Kill the process tree | Signals to descendants found in `/proc` | Signals to descendants found with `ps` | `TerminateJobObject` |
-| IPC | Unix socket (mode 0600) | Unix socket (mode 0600) | Named pipe, current user only |
+| IPC | Unix socket (mode 0600) | Unix socket (mode 0600) | Named pipe per daemon, current user only (its name is in `daemon.pipe`, so a new daemon can start while a retired one finishes its jobs) |
 | Machine-wide lock | `flock` | `flock` | Named mutex (per logon session) |
 
 Limitations:

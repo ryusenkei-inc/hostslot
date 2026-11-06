@@ -6,8 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -178,22 +182,86 @@ func DetachedAttr() *syscall.SysProcAttr {
 
 // ---- IPC: named pipe ----
 
-type pipeIPC struct{ name string }
+// Each daemon listens on its own pipe and writes the name to pipeFile.
+// go-winio creates a pipe's first instance exclusively, so a new daemon
+// cannot listen on a name whose instances a retired daemon still holds for
+// its running jobs.
+type pipeIPC struct {
+	base string // also the name of daemons before pipeFile existed
+	file string
+}
 
-func newIPC(p Paths) IPC { return pipeIPC{name: `\\.\pipe\jobgate-` + instanceID(p.Data)} }
+// pipeFile names the current daemon's pipe inside the runtime directory.
+const pipeFile = "daemon.pipe"
 
-func (i pipeIPC) Address() string { return i.name }
+func newIPC(p Paths) IPC {
+	return pipeIPC{base: `\\.\pipe\jobgate-` + instanceID(p.Data), file: filepath.Join(p.Runtime, pipeFile)}
+}
+
+func (i pipeIPC) current() string {
+	b, err := os.ReadFile(i.file)
+	if name := strings.TrimSpace(string(b)); err == nil && strings.HasPrefix(name, i.base) {
+		return name
+	}
+	return i.base
+}
+
+func (i pipeIPC) Address() string { return i.current() }
 
 func (i pipeIPC) Listen() (net.Listener, error) {
 	sd, err := ownerOnlySDDL()
 	if err != nil {
 		return nil, err
 	}
-	return winio.ListenPipe(i.name, &winio.PipeConfig{SecurityDescriptor: sd})
+	name := i.base + "-" + strconv.Itoa(os.Getpid()) + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	l, err := winio.ListenPipe(name, &winio.PipeConfig{SecurityDescriptor: sd})
+	if err != nil {
+		return nil, err
+	}
+	if err := writeFileAtomic(i.file, []byte(name)); err != nil {
+		l.Close()
+		return nil, err
+	}
+	return &pipeListener{Listener: l, name: name, file: i.file}, nil
 }
 
 func (i pipeIPC) Dial(timeout time.Duration) (net.Conn, error) {
-	return winio.DialPipe(i.name, &timeout)
+	return winio.DialPipe(i.current(), &timeout)
+}
+
+// pipeListener removes pipeFile on Close while it still names this pipe, so
+// a retired daemon never removes its successor's name.
+type pipeListener struct {
+	net.Listener
+	name string
+	file string
+	once sync.Once
+}
+
+func (l *pipeListener) Close() error {
+	l.once.Do(func() {
+		if b, err := os.ReadFile(l.file); err == nil && strings.TrimSpace(string(b)) == l.name {
+			os.Remove(l.file)
+		}
+	})
+	return l.Listener.Close()
+}
+
+func writeFileAtomic(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".pipe-*")
+	if err != nil {
+		return err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func ownerOnlySDDL() (string, error) {
