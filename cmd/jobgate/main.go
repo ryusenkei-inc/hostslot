@@ -29,7 +29,7 @@ import (
 const usage = `jobgate: a machine-wide gate for heavy local jobs
 
 Usage:
-  jobgate run [--weight N] [--priority interactive|background] [--as LABEL]
+  jobgate run [--weight N] [--priority interactive|background] [--as LABEL] [--source NAME]
               [--max-wait DURATION] [--timeout DURATION] -- <command> [args...]
   jobgate status [--json]
   jobgate daemon
@@ -103,6 +103,7 @@ func cmdRun(args []string) int {
 	weight := fs.Int("weight", 1, "relative cost of the job in slots; a hint until samples exist")
 	prio := fs.String("priority", "", "interactive or background (default: interactive when stdin is a terminal)")
 	label := fs.String("as", "", "name the work for learning (default: the command line)")
+	source := fs.String("source", os.Getenv("JOBGATE_SOURCE"), "who starts the job, shown in status (default: $JOBGATE_SOURCE)")
 	maxWait := fs.Duration("max-wait", 0, "give up waiting for a slot after this long and exit 75 (0 = wait forever)")
 	timeout := fs.Duration("timeout", 0, "stop the command after it has run this long and exit 124 (0 = none)")
 	if err := fs.Parse(args); err != nil {
@@ -128,6 +129,7 @@ func cmdRun(args []string) int {
 	code, err := runner.Run(p, runner.Options{
 		Args:     cmd,
 		Label:    *label,
+		Source:   *source,
 		MaxWait:  *maxWait,
 		Timeout:  *timeout,
 		Weight:   *weight,
@@ -355,13 +357,17 @@ func printStatus(w io.Writer, s *daemon.Status) {
 			return
 		}
 		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-		fmt.Fprintln(tw, "  ID\tWEIGHT\tEST MB\tNOW MB\tSAMPLES\tPRIORITY\tAGE\tCOMMAND\tDIR")
+		fmt.Fprintln(tw, "  ID\tWEIGHT\tEST MB\tNOW MB\tSAMPLES\tPRIORITY\tSOURCE\tAGE\tCOMMAND\tDIR")
 		for _, j := range jobs {
 			now := "-"
 			if j.Reported {
 				now = strconv.FormatUint(j.CurrentMB, 10)
 			}
-			fmt.Fprintf(tw, "  %d\t%d\t%d\t%s\t%d\t%s\t%s\t%s\t%s\n", j.ID, j.Slots, j.EstimateMB, now, j.Samples, j.Priority,
+			source := j.Source
+			if source == "" {
+				source = "-"
+			}
+			fmt.Fprintf(tw, "  %d\t%d\t%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n", j.ID, j.Slots, j.EstimateMB, now, j.Samples, j.Priority, source,
 				time.Since(since(j)).Round(time.Second), truncate(j.Command, 60), j.Dir)
 		}
 		tw.Flush()

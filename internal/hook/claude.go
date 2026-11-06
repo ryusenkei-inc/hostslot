@@ -191,10 +191,10 @@ func shellScript(args []*syntax.Word) (string, bool) {
 	return literal(args[2])
 }
 
-// Wrap returns line as one jobgate job that learns as label. Agents are not
-// at a terminal, so the job runs at background priority.
+// Wrap returns line as one jobgate job of Claude Code that learns as label.
+// Agents are not at a terminal, so the job runs at background priority.
 func Wrap(line, label string, weight int, b Budget) string {
-	run := "jobgate run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --as " + shellQuote(label)
+	run := "jobgate run --weight " + strconv.Itoa(max(weight, 1)) + " --priority background --source claude --as " + shellQuote(label)
 	if b.MaxWait > 0 {
 		run += " --max-wait " + b.MaxWait.String()
 	}
