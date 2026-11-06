@@ -1,0 +1,27 @@
+{
+  "name": "@ryusenkei/monorepo-template",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "lint": "pnpm typecheck && prose-lint && ryusenkei-conventions check",
+    "lint:prose": "prose-lint",
+    "typecheck": "pnpm -r --if-present typecheck && tsc",
+    "test": "vitest run --passWithNoTests",
+    "env:push": "node scripts/env.ts push",
+    "repo:settings": "node scripts/repo.ts",
+    "prepare": "git config core.hooksPath .githooks"
+  },
+  "devDependencies": {
+    "@ryusenkei/conventions": "^0.1.2",
+    "@ryusenkei/prose-lint": "^0.1.0",
+    "@types/cross-spawn": "^6.0.6",
+    "@types/node": "^26.6.1",
+    "cross-spawn": "^7.0.6",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.1"
+  }
+}

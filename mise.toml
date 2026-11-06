@@ -1,0 +1,4 @@
+# ツールのバージョン（pnpm は package.json の packageManager で固定）
+[tools]
+node = "24"
+terraform = "1"

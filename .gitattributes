@@ -1,0 +1,2 @@
+# 改行は LF に統一（OS による差分・警告を防止。フックは CRLF だと sh で動かない）
+* text=auto eol=lf

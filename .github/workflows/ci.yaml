@@ -1,0 +1,50 @@
+# push・PR ごとの検査。1 ジョブで手順に名前を付け、失敗した検査を画面で識別
+name: CI
+
+# main への push と PR だけ
+on:
+  push:
+    branches: [main]
+  pull_request:
+    # `edited` = PR のタイトルの変更でも再検査
+    types: [opened, synchronize, reopened, edited]
+
+# 同じ ref の新しい実行が来たら古い実行を中止
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # 秘密値の検査は全履歴が対象
+      # Node・Terraform = mise.toml
+      - uses: jdx/mise-action@v4
+      - uses: pnpm/action-setup@v6
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Test
+        run: pnpm test
+      - name: Prose lint
+        run: pnpm lint:prose
+      # squash merge → main のコミットのメッセージ = PR のタイトル（手元の commit-msg フックの対象外）
+      #   タイトルは環境変数で受け渡し（式の展開によるコマンドの注入を防止）
+      #   Dependabot の PR は英語の定型のタイトル → 対象外
+      - name: PR title
+        if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$TITLE" > "$RUNNER_TEMP/title"
+          pnpm exec prose-lint --commit-msg "$RUNNER_TEMP/title"
+      # gitleaks-action は組織での利用に有料ライセンスが必要 → CLI の公式イメージを直接実行
+      - name: Secret scan
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --config /repo/.gitleaks.toml --redact --verbose

@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# 公開から2日未満のバージョンは解決しない（`.github/dependabot.yaml` の `cooldown` と同値）
+minimumReleaseAge: 2880
+minimumReleaseAgeExclude:
+  - "@ryusenkei/*"

@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # npm（pnpm ワークスペース）。ルートの1件で apps/*・packages/* を横断
+  - package-ecosystem: npm
+    directory: "/"
+    # 毎日（自社のパッケージの新しいバージョンをすぐ取り込むため）
+    schedule:
+      interval: daily
+    # 公開直後のバージョンは配布ファイルの反映待ちでインストールに失敗しうる → 2日待つ。自社のパッケージは待たない
+    cooldown:
+      default-days: 2
+      exclude:
+        - "@ryusenkei/*"
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      # 自社のパッケージは単独の PR（先に一致したグループに入る）
+      ryusenkei:
+        patterns:
+          - "@ryusenkei/*"
+      # minor・patch は1つの PR にまとめる（major は個別の PR でレビュー）
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
+    open-pull-requests-limit: 10
+
+  # GitHub Actions（.github/workflows のアクション）
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns:
+          - "*"

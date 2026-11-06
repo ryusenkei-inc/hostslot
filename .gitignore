@@ -1,0 +1,46 @@
+# リポ全体の除外。パッケージ・アプリ固有のものは各階層の .gitignore（apps/site・infra）
+
+# ---- 依存 ----
+node_modules/
+.pnpm-store/
+
+# ---- ビルド・生成物 ----
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.astro/
+.wrangler/
+
+# ---- 秘密値（コミット禁止。雛形の .env.example のみ追跡） ----
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+
+# ---- ログ ----
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- エディタ・IDE ----
+.idea/
+.vscode/
+*.code-workspace
+*.swp
+*~
+
+# ---- Claude Code（skills は追跡） ----
+.claude/worktrees/
+.claude/settings.local.json
+
+# ---- 作業用の一時ファイル（一回限りのスクリプトなど） ----
+.tmp/

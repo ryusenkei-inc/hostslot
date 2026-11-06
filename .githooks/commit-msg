@@ -1,0 +1,3 @@
+#!/bin/sh
+# コミットメッセージの文体の検査（規則 = @ryusenkei/prose-lint）
+exec npx --no -- prose-lint --commit-msg "$1"
