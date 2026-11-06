@@ -1,10 +1,12 @@
 // What the status bar item and the status command show, from `loadslot
 // status --json`. Pure functions, so they are tested without Orca.
+import { origin } from './origin.ts';
 
 /** One job in `loadslot status --json`. */
 export type Job = {
   id?: number;
   command: string;
+  dir?: string;
   key?: string;
   source?: string;
   estimateMB: number;
@@ -90,7 +92,7 @@ export function describe(s: Status, now = Date.now()): string {
     lines.push(`${title}:`);
     for (const j of jobs) {
       const memory = j.reported ? `${gb(j.currentMB ?? 0)} of ~${gb(j.estimateMB)}` : `~${gb(j.estimateMB)}`;
-      lines.push(`  ${label(j)} (${j.source ?? 'terminal'}, ${memory}, ${age(since(j), now)})`);
+      lines.push(`  ${label(j)} (${[origin(j), j.source ?? 'terminal'].filter(Boolean).join(', ')}, ${memory}, ${age(since(j), now)})`);
     }
   };
   list('Running', running, (j) => j.started);

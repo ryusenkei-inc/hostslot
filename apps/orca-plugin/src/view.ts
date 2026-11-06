@@ -1,5 +1,6 @@
 // What the details panel shows, built by the worker from `loadslot status
 // --json` and posted to the panel. Pure, so it is tested without Orca.
+import { origin } from './origin.ts';
 import type { Job, Problem, Status } from './status.ts';
 
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
@@ -8,6 +9,9 @@ type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 export type JobRow = {
   key: string;
   title: string;
+  /** The repository (and worktree) the job runs in. */
+  where: string;
+  /** Who started it: an agent such as `claude`, or `terminal`. */
   source: string;
   memory: string;
   /** Milliseconds since the epoch, for `RelativeTime`. */
@@ -68,7 +72,8 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
       // Orca refuses values that are not plain JSON, so no `tone: undefined`.
       { label: 'Free memory', value: `${gb(free)} of ${gb(s.memory.totalMB)}`, ...(low ? { tone: 'danger' as const } : {}) },
       { label: 'CPUs', value: String(s.cpus) },
-      { label: 'Daemon', value: `${s.mode}${s.version ? ` ${s.version}` : ''}` },
+      // The gate itself: its version, and the mode when it is not the daemon.
+      { label: 'loadslot', value: `${s.version ?? 'unknown version'}${s.mode === 'daemon' ? '' : ` (${s.mode})`}` },
     ],
     running: running.map((j) => row(j, j.started)),
     waiting: waiting.map((j) => row(j, j.queued)),
@@ -80,6 +85,7 @@ function row(j: Job, since: string | undefined): JobRow {
   return {
     key: String(j.id ?? `${j.command}@${j.queued}`),
     title: j.key?.split('\n').at(-1) || j.command,
+    where: origin(j),
     source: j.source ?? 'terminal',
     memory: j.reported ? `${gb(j.currentMB ?? 0)} of ~${gb(j.estimateMB)}` : `~${gb(j.estimateMB)}`,
     since: since ? Date.parse(since) : Date.now(),
