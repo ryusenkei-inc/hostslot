@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsHeavy(t *testing.T) {
@@ -45,6 +46,7 @@ func TestIsHeavy(t *testing.T) {
 		`echo "a | pnpm test"`,
 		"git log # pnpm test",
 		"pnpm test 'unclosed",
+		"JOBGATE_DISABLE=1 go test ./...",
 	}
 	for _, c := range heavy {
 		if len(Heavy(c, nil)) == 0 {
@@ -91,7 +93,7 @@ func TestClaudeRewritesHeavyBash(t *testing.T) {
 		t.Fatalf("%v: %s", err, out.String())
 	}
 	got := res.HookSpecificOutput
-	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "jobgate run --weight 2 --priority background --as 'pnpm test' -- sh -c 'pnpm test'" {
+	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "jobgate run --weight 2 --priority background --as 'pnpm test' --max-wait 1m0s --timeout 9m0s -- sh -c 'pnpm test'" {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 	if got.UpdatedInput["timeout"] != float64(600000) {
@@ -121,7 +123,7 @@ func TestWrapQuotesForSh(t *testing.T) {
 		}
 	}
 	line := `printf '%s\n' "it's" $HOME`
-	wrapped := Wrap(line, "x", 1)
+	wrapped := Wrap(line, "x", 1, Budget{})
 	inner := strings.TrimPrefix(wrapped, "jobgate run --weight 1 --priority background --as 'x' -- sh -c ")
 	// The quoted argument must reach sh as the original line.
 	out, err := exec.Command("sh", "-c", "printf '%s' "+inner).Output()
@@ -130,5 +132,34 @@ func TestWrapQuotesForSh(t *testing.T) {
 	}
 	if string(out) != line {
 		t.Fatalf("got %q, want %q", out, line)
+	}
+}
+
+func TestClaudeBudget(t *testing.T) {
+	cases := []struct {
+		asked, wait, run time.Duration
+	}{
+		{0, 8 * time.Minute, 2 * time.Minute},
+		{30 * time.Second, 9*time.Minute + 30*time.Second, 30 * time.Second},
+		{10 * time.Minute, time.Minute, 9 * time.Minute},
+		{time.Hour, time.Minute, 9 * time.Minute},
+	}
+	for _, c := range cases {
+		b, tool := claudeBudget(c.asked)
+		if b.MaxWait != c.wait || b.Timeout != c.run || tool != 10*time.Minute {
+			t.Errorf("asked %s: got wait %s run %s tool %s", c.asked, b.MaxWait, b.Timeout, tool)
+		}
+	}
+}
+
+func TestClaudeBackgroundCallsHaveNoBudget(t *testing.T) {
+	in := `{"tool_name":"Bash","tool_input":{"command":"pnpm test","run_in_background":true}}`
+	var out bytes.Buffer
+	if err := Claude(strings.NewReader(in), &out, ClaudeOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if strings.Contains(s, "--max-wait") || strings.Contains(s, "--timeout") || strings.Contains(s, `"timeout"`) {
+		t.Fatalf("background call got a budget: %s", s)
 	}
 }

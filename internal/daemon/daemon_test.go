@@ -44,7 +44,7 @@ func acquireAsync(t *testing.T, p *platform.Platform, req gate.Request) (<-chan 
 	}
 	ch := make(chan *Lease, 1)
 	go func() {
-		l, err := Acquire(c, req, nil)
+		l, err := Acquire(c, req, time.Time{}, nil)
 		if err == nil {
 			ch <- l
 		}
@@ -123,6 +123,35 @@ func TestWaitingClientThatLeavesIsDropped(t *testing.T) {
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("waiting job not dropped: %+v", s)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	l1.Release(nil)
+}
+
+func TestAcquireGivesUpAtTheDeadlineAndLeavesTheQueue(t *testing.T) {
+	p, _ := startServer(t, 1)
+	req := gate.Request{Command: "build", Dir: "/r", Weight: 1, PID: 1}
+	first, _ := acquireAsync(t, p, req)
+	l1 := waitLease(t, first)
+
+	c, err := p.IPC.Dial(time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Acquire(c, req, time.Now().Add(300*time.Millisecond), nil); err != ErrBusy {
+		t.Fatalf("got %v, want ErrBusy", err)
+	}
+	c.Close()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s, err := QueryStatus(p)
+		if err == nil && len(s.Snapshot.Waiting) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the job that gave up is still queued")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}

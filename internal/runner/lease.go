@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -24,12 +25,14 @@ type lease struct {
 
 const statusEvery = 5 * time.Second
 
-func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, noDaemon bool, stderr io.Writer) (*lease, error) {
+// acquire returns daemon.ErrBusy when deadline (none when zero) passes
+// first, in either mode.
+func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, deadline time.Time, noDaemon bool, stderr io.Writer) (*lease, error) {
 	if !noDaemon {
 		c, err := daemon.Connect(p)
 		if err == nil {
 			var last time.Time
-			l, err := daemon.Acquire(c, req, func(m daemon.Message) {
+			l, err := daemon.Acquire(c, req, deadline, func(m daemon.Message) {
 				if time.Since(last) < statusEvery || m.Status == nil {
 					return
 				}
@@ -42,18 +45,21 @@ func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, noDaemon b
 				return &lease{job: l.Job, slots: l.Status.Snapshot.Slots, cpus: l.Status.CPUs, mode: "daemon", release: l.Release}, nil
 			}
 			c.Close()
+			if errors.Is(err, daemon.ErrBusy) {
+				return nil, err
+			}
 			fmt.Fprintf(stderr, "jobgate: daemon error, using lock fallback: %v\n", err)
 		} else {
 			fmt.Fprintf(stderr, "jobgate: no daemon (%v), using lock fallback\n", err)
 		}
 	}
-	return acquireLocks(p, cfg, req, stderr)
+	return acquireLocks(p, cfg, req, deadline, stderr)
 }
 
 // acquireLocks emulates the slots with one named lock per slot. The OS
 // releases locks of a crashed process, so a crash returns its slots. There is
 // no priority or queue order in this mode.
-func acquireLocks(p *platform.Platform, cfg gate.Config, req gate.Request, stderr io.Writer) (*lease, error) {
+func acquireLocks(p *platform.Platform, cfg gate.Config, req gate.Request, deadline time.Time, stderr io.Writer) (*lease, error) {
 	if err := p.Paths.Ensure(); err != nil {
 		return nil, err
 	}
@@ -81,6 +87,9 @@ func acquireLocks(p *platform.Platform, cfg gate.Config, req gate.Request, stder
 				return lockLease(p, st, job, slots, cpus, held), nil
 			}
 			releaseAll(held)
+		}
+		if !deadline.IsZero() && time.Now().After(deadline) {
+			return nil, daemon.ErrBusy
 		}
 		if time.Since(last) >= statusEvery {
 			last = time.Now()

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ryusenkei-inc/jobgate/internal/config"
+	"github.com/ryusenkei-inc/jobgate/internal/daemon"
 	"github.com/ryusenkei-inc/jobgate/internal/gate"
 	"github.com/ryusenkei-inc/jobgate/internal/jobkey"
 	"github.com/ryusenkei-inc/jobgate/internal/platform"
@@ -42,7 +43,22 @@ type Options struct {
 	// holds a slot (JOBGATE_JOB is set). Waiting for a second slot could
 	// deadlock when the outer job holds the last one.
 	Nested bool
+	// MaxWait gives up waiting for a slot after this long (0 = wait forever)
+	// and exits with ExitBusy. Agents' tool calls have a timeout that the
+	// wait counts toward.
+	MaxWait time.Duration
+	// Timeout kills the command's process tree after this long once it runs
+	// (0 = none) and exits with ExitTimeout.
+	Timeout time.Duration
 }
+
+// Exit codes of jobgate itself.
+const (
+	// ExitBusy: no slot within MaxWait (EX_TEMPFAIL, retry later).
+	ExitBusy = 75
+	// ExitTimeout: the command ran longer than Timeout (as GNU timeout).
+	ExitTimeout = 124
+)
 
 // JobVar marks the environment of a gated command, so jobgate runs nested
 // in it pass through.
@@ -61,7 +77,8 @@ func Run(p *platform.Platform, o Options) (int, error) {
 		return 2, errors.New("no command")
 	}
 	if o.Disable || o.Nested {
-		return execute(p, o, os.Environ(), nil)
+		code, _, err := execute(p, o, os.Environ(), nil)
+		return code, err
 	}
 	cfg, err := config.Load(p.Paths.Data)
 	if err != nil {
@@ -80,7 +97,15 @@ func Run(p *platform.Platform, o Options) (int, error) {
 		Priority: o.Priority,
 		PID:      os.Getpid(),
 	}
-	l, err := acquire(p, cfg, req, o.NoDaemon, o.Stderr)
+	var deadline time.Time
+	if o.MaxWait > 0 {
+		deadline = time.Now().Add(o.MaxWait)
+	}
+	l, err := acquire(p, cfg, req, deadline, o.NoDaemon, o.Stderr)
+	if errors.Is(err, daemon.ErrBusy) {
+		fmt.Fprintf(o.Stderr, "jobgate: no free slot within %s; the machine is busy (see `jobgate status`). Retry later, or allow a longer wait.\n", o.MaxWait)
+		return ExitBusy, nil
+	}
 	if err != nil {
 		return 2, err
 	}
@@ -88,9 +113,10 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	env := append(withWorkers(os.Environ(), workers), JobVar+"=1")
 	start := time.Now()
 	var peak uint64
-	code, err := execute(p, o, env, &peak)
+	code, timedOut, err := execute(p, o, env, &peak)
 	sample := &store.Sample{PeakMB: peak, DurationMS: time.Since(start).Milliseconds(), ExitCode: code, At: time.Now()}
-	if err != nil {
+	// A killed run's peak is only a lower bound of its cost.
+	if err != nil || timedOut {
 		sample = nil
 	}
 	l.release(sample)
@@ -119,7 +145,8 @@ func withWorkers(env []string, workers int) []string {
 	return env
 }
 
-func execute(p *platform.Platform, o Options, env []string, peak *uint64) (int, error) {
+// execute runs the command; timedOut reports that o.Timeout killed it.
+func execute(p *platform.Platform, o Options, env []string, peak *uint64) (code int, timedOut bool, err error) {
 	cmd := exec.Command(o.Args[0], o.Args[1:]...)
 	cmd.Dir = o.Dir
 	cmd.Env = env
@@ -137,12 +164,18 @@ func execute(p *platform.Platform, o Options, env []string, peak *uint64) (int, 
 		var notFound *exec.Error
 		if errors.As(err, &notFound) {
 			fmt.Fprintf(o.Stderr, "jobgate: %v\n", err)
-			return 127, nil
+			return 127, false, nil
 		}
-		return 1, err
+		return 1, false, err
 	}
 	waited := make(chan error, 1)
 	go func() { waited <- proc.Wait() }()
+	var expired <-chan time.Time
+	if o.Timeout > 0 {
+		t := time.NewTimer(o.Timeout)
+		defer t.Stop()
+		expired = t.C
+	}
 	var werr error
 	signals := 0
 loop:
@@ -157,12 +190,19 @@ loop:
 			} else {
 				_ = proc.KillTree()
 			}
+		case <-expired:
+			timedOut = true
+			_ = proc.KillTree()
 		}
 	}
 	if peak != nil {
 		*peak = proc.PeakMB()
 	}
-	return exitCode(cmd, werr), nil
+	if timedOut {
+		fmt.Fprintf(o.Stderr, "jobgate: the command ran longer than %s and was stopped\n", o.Timeout)
+		return ExitTimeout, true, nil
+	}
+	return exitCode(cmd, werr), false, nil
 }
 
 func exitCode(cmd *exec.Cmd, err error) int {
