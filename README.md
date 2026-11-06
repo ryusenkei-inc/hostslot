@@ -17,7 +17,7 @@ jobgate does, across tools and repositories. It works the same from a plain term
 - **Slots:** `floor((total memory x 0.6 - reserve) / cost of a weight-1 job)`, capped by the CPU count and at least 1. With the defaults (1 GB reserve, 2 GB per weight-1 job), a 16 GB machine has 4 slots.
 - **Admission:** a job needs free slots for its weight and enough free memory for its estimated peak. Memory of jobs admitted in the last 15 seconds is subtracted, since they haven't grown yet. When nothing runs, the next job is always admitted.
 - **Order:** interactive jobs before background jobs, first come first served within each. The head of the queue blocks later jobs, so a heavy job is never starved by lighter ones.
-- **Learning:** jobgate records the peak memory of each wrapped command, including its child processes, keyed by command line and working directory. After 3 runs, the recent peak replaces the weight hint. A command that turns out light takes 1 slot, even with `--weight 3`.
+- **Learning:** jobgate records the peak memory of each wrapped command, including its child processes, keyed by the command and where it runs: inside a git repository, the repository (shared by all of its worktrees) and the path inside it; elsewhere, the directory. `--as` names the work when the command line varies, such as a wrapper script. After 3 runs, the recent peak replaces the weight hint. A command that turns out light takes 1 slot, even with `--weight 3`.
 - **Inner parallelism:** the wrapped command gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency` and `pnpm_config_workspace_concurrency` (pnpm's `--workspace-concurrency`: pnpm 10 reads the first, pnpm 11 the second), unless `CI` is set or the variable is already set. `JOBGATE_WORKERS` is always set for your own scripts.
 - **Nesting:** a `jobgate run` inside a gated command runs directly, since the outer job already holds a slot (jobgate sets `JOBGATE_JOB` for the command). Wrapping at several layers, such as a Claude Code hook, a git hook and package scripts, never deadlocks.
 - **Daemon:** the first `jobgate run` starts a small daemon in the background. The CLI talks to it over a Unix socket or a named pipe. The daemon exits after 10 minutes without jobs.
@@ -35,7 +35,7 @@ Requires Go 1.26 or later. Make sure `$(go env GOPATH)/bin` is on your `PATH`.
 ## Usage
 
 ```sh
-jobgate run [--weight N] [--priority interactive|background] -- <command> [args...]
+jobgate run [--weight N] [--priority interactive|background] [--as LABEL] -- <command> [args...]
 jobgate status [--json]
 jobgate daemon [--idle 10m]
 jobgate hook claude [--weight N] [--match REGEX]
@@ -45,6 +45,7 @@ jobgate version
 - `run` waits for admission, printing a status line to stderr every 5 seconds, then runs the command with stdin, stdout and stderr passed through. It exits with the command's exit code (`128 + signal` when killed by a signal, `127` when the command isn't found).
 - `--weight` is the expected cost in slots. It only matters until jobgate has learned the command.
 - `--priority` defaults to `interactive` when stdin is a terminal and `background` otherwise.
+- `--as` names the work for learning instead of the command line, e.g. `jobgate run --as "pnpm test" -- sh -c 'pnpm test 2>&1 | tail'`.
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated memory) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
@@ -180,6 +181,7 @@ Limitations:
 | `internal/gate` | Scheduler core, OS-independent and pure: slots, admission, priority, learning estimates | — |
 | `internal/platform` | OS ports: metrics, process tracking, IPC, locks, paths. One file per OS, selected by build tags | — |
 | `internal/store` | Learning samples in `samples.json` | — |
+| `internal/jobkey` | Learning keys: repository (across worktrees), path inside it, label | — |
 | `internal/config` | `config.json` and environment overrides | `internal/gate` |
 | `internal/daemon` | Daemon and client: admission over IPC, started on demand | `internal/gate`, `internal/platform`, `internal/store` |
 | `internal/hook` | Agent hooks: rewrite heavy commands to `jobgate run`, text only | — |

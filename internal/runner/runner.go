@@ -17,13 +17,17 @@ import (
 
 	"github.com/ryusenkei-inc/jobgate/internal/config"
 	"github.com/ryusenkei-inc/jobgate/internal/gate"
+	"github.com/ryusenkei-inc/jobgate/internal/jobkey"
 	"github.com/ryusenkei-inc/jobgate/internal/platform"
 	"github.com/ryusenkei-inc/jobgate/internal/store"
 )
 
 // Options configure one run.
 type Options struct {
-	Args     []string
+	Args []string
+	// Label names the work for learning (default: the command line), so a
+	// wrapper such as `sh -c '<line>'` can learn as the heavy command inside.
+	Label    string
 	Weight   int
 	Priority gate.Priority
 	Dir      string
@@ -63,9 +67,15 @@ func Run(p *platform.Platform, o Options) (int, error) {
 	if err != nil {
 		return 2, err
 	}
+	command := strings.Join(o.Args, " ")
+	label := o.Label
+	if label == "" {
+		label = command
+	}
 	req := gate.Request{
-		Command:  strings.Join(o.Args, " "),
+		Command:  command,
 		Dir:      o.Dir,
+		LearnKey: jobkey.For(o.Dir, label),
 		Weight:   max(o.Weight, 1),
 		Priority: o.Priority,
 		PID:      os.Getpid(),

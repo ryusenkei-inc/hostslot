@@ -28,7 +28,7 @@ import (
 const usage = `jobgate: a machine-wide gate for heavy local jobs
 
 Usage:
-  jobgate run [--weight N] [--priority interactive|background] -- <command> [args...]
+  jobgate run [--weight N] [--priority interactive|background] [--as LABEL] -- <command> [args...]
   jobgate status [--json]
   jobgate daemon
   jobgate hook claude [--weight N] [--match REGEX]
@@ -97,6 +97,7 @@ func cmdRun(args []string) int {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	weight := fs.Int("weight", 1, "relative cost of the job in slots; a hint until samples exist")
 	prio := fs.String("priority", "", "interactive or background (default: interactive when stdin is a terminal)")
+	label := fs.String("as", "", "name the work for learning (default: the command line)")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -119,6 +120,7 @@ func cmdRun(args []string) int {
 	}
 	code, err := runner.Run(p, runner.Options{
 		Args:     cmd,
+		Label:    *label,
 		Weight:   *weight,
 		Priority: priority,
 		Dir:      dir,

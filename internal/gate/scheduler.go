@@ -41,10 +41,18 @@ type Request struct {
 	Weight   int      `json:"weight"`
 	Priority Priority `json:"priority"`
 	PID      int      `json:"pid"`
+	// LearnKey groups the samples of runs that cost the same (see package
+	// jobkey). Empty means the command in the directory.
+	LearnKey string `json:"key,omitempty"`
 }
 
-// Key identifies a job for learning: same command in the same directory.
-func (r Request) Key() string { return r.Dir + "\n" + r.Command }
+// Key identifies a job for learning.
+func (r Request) Key() string {
+	if r.LearnKey != "" {
+		return r.LearnKey
+	}
+	return r.Dir + "\n" + r.Command
+}
 
 // Job is a request known to the scheduler.
 type Job struct {
