@@ -232,3 +232,42 @@ func TestNearlyOutOfMemoryStopsTheLargestBackgroundJob(t *testing.T) {
 	big.Release(nil)
 	small.Release(nil)
 }
+
+func TestStatusListsRecentJobsWithTheirOutcome(t *testing.T) {
+	p, st := startServer(t, 1)
+	req := gate.Request{Command: "build", Dir: "/r", Weight: 1, PID: 1}
+	ch, _ := acquireAsync(t, p, req)
+	l := waitLease(t, ch)
+
+	// A second job gives up waiting.
+	c, err := p.IPC.Dial(time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Acquire(c, gate.Request{Command: "test", Dir: "/r", Weight: 1, PID: 2}, time.Now().Add(200*time.Millisecond), nil); err != ErrBusy {
+		t.Fatalf("got %v", err)
+	}
+	c.Close()
+	l.Release(&store.Sample{PeakMB: 300, DurationMS: 1500, Outcome: "timeout"})
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		s, err := QueryStatus(p)
+		if err == nil && len(s.Recent) == 2 {
+			if s.Recent[0].Outcome != "timeout" || s.Recent[0].PeakMB != 300 || s.Recent[1].Outcome != "gave up" {
+				t.Fatalf("recent: %+v", s.Recent)
+			}
+			if s.ReserveMB == 0 {
+				t.Fatalf("reserve missing: %+v", s)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("recent not listed: %+v %v", s, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if peaks := st.Peaks(req.Key()); len(peaks) != 0 {
+		t.Fatalf("a timed-out run was learned: %v", peaks)
+	}
+}

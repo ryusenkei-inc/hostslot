@@ -416,6 +416,22 @@ func printStatus(w io.Writer, s *daemon.Status) {
 	}
 	section("running", s.Snapshot.Running, func(j gate.Job) time.Time { return j.Started })
 	section("waiting", s.Snapshot.Waiting, func(j gate.Job) time.Time { return j.Queued })
+	if len(s.Recent) == 0 {
+		return
+	}
+	const recentShown = 5
+	fmt.Fprintf(w, "\nrecent (%d)\n", len(s.Recent))
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "  OUTCOME\tPEAK MB\tTOOK\tENDED\tCOMMAND\tDIR")
+	for _, f := range s.Recent[:min(len(s.Recent), recentShown)] {
+		label := f.Command
+		if i := strings.LastIndexByte(f.Key, '\n'); i >= 0 {
+			label = f.Key[i+1:]
+		}
+		fmt.Fprintf(tw, "  %s\t%d\t%s\t%s ago\t%s\t%s\n", f.Outcome, f.PeakMB, (time.Duration(f.DurationMS) * time.Millisecond).Round(time.Second),
+			time.Since(f.Ended).Round(time.Second), truncate(label, 60), f.Dir)
+	}
+	tw.Flush()
 }
 
 func truncate(s string, n int) string {

@@ -274,3 +274,30 @@ func TestLargestPicksTheBiggestBackgroundJob(t *testing.T) {
 		t.Fatalf("got %d %d %v, want the big background job", id, mb, ok)
 	}
 }
+
+type durationEstimator struct{ fakeEstimator }
+
+func (durationEstimator) Durations(string) []int64 { return []int64{9000, 1000, 3000} }
+
+func TestSnapshotAtExplainsHeldMemoryAndWaits(t *testing.T) {
+	s := New(cfg(), 2, durationEstimator{fakeEstimator{}})
+	a := s.Enqueue(Request{Command: "a", Weight: 1}, t0)
+	if a.ExpectedMS != 3000 {
+		t.Fatalf("expected duration: %d", a.ExpectedMS)
+	}
+	s.Admit(t0, 100000)
+	s.Enqueue(Request{Command: "big", Weight: 2}, t0)
+	s.Enqueue(Request{Command: "c", Weight: 1}, t0)
+
+	snap := s.SnapshotAt(t0.Add(time.Second), 5000)
+	if snap.Running[0].HeldMB != 1000 || snap.HeldMB != 1000 {
+		t.Fatalf("held during warmup: %+v", snap)
+	}
+	if snap.Waiting[0].Reason != "slots" || snap.Waiting[1].Reason != "queue" {
+		t.Fatalf("reasons: %q %q", snap.Waiting[0].Reason, snap.Waiting[1].Reason)
+	}
+	s.Remove(snap.Waiting[0].ID)
+	if got := s.SnapshotAt(t0.Add(time.Second), 1500).Waiting[0].Reason; got != "memory" {
+		t.Fatalf("memory reason: %q", got)
+	}
+}
