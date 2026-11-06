@@ -1,5 +1,5 @@
 {
-  "name": "@ryusenkei/monorepo-template",
+  "name": "jobgate",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.0",
@@ -7,10 +7,10 @@
     "node": ">=24"
   },
   "scripts": {
-    "lint": "pnpm typecheck && prose-lint && ryusenkei-conventions check",
+    "lint": "pnpm typecheck && prose-lint && ryusenkei-conventions check && go vet ./...",
     "lint:prose": "prose-lint",
-    "typecheck": "pnpm -r --if-present typecheck && tsc",
-    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc",
+    "test": "go test ./...",
     "env:push": "node scripts/env.ts push",
     "repo:settings": "node scripts/repo.ts",
     "prepare": "git config core.hooksPath .githooks"
@@ -21,7 +21,6 @@
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^26.6.1",
     "cross-spawn": "^7.0.6",
-    "typescript": "^5.9.3",
-    "vitest": "^5.0.1"
+    "typescript": "^5.9.3"
   }
 }

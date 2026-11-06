@@ -1,8 +1,6 @@
-packages:
-  - apps/*
-  - packages/*
+# Node.js is dev tooling only (prose-lint, shared conventions, scripts/); the product is the Go module
 
-# 公開から2日未満のバージョンは解決しない（`.github/dependabot.yaml` の `cooldown` と同値）
+# Skip versions published less than 2 days ago (same as `cooldown` in `.github/dependabot.yaml`)
 minimumReleaseAge: 2880
 minimumReleaseAgeExclude:
   - "@ryusenkei/*"
