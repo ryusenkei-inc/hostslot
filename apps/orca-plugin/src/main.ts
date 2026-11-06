@@ -55,7 +55,10 @@ function run(file: string, args: string[]): Promise<string> {
   });
 }
 
-/** Warnings and errors from `loadslot doctor --json`, plus a binary older than the plugin, and how many checks ran. */
+/**
+ * Warnings and errors from `loadslot doctor --json`, plus a binary older than
+ * the plugin, and how many checks ran.
+ */
 async function checkSetup(file: string, plugin: string): Promise<{ problems: Problem[]; checks: number }> {
   const problems: Problem[] = [];
   let checks = 0;
