@@ -18,6 +18,7 @@ func TestMain(m *testing.M) {
 	switch os.Getenv("JOBGATE_TEST_HELPER") {
 	case "env":
 		os.Stdout.WriteString("workers=" + os.Getenv("VITEST_MAX_WORKERS") + "\n")
+		os.Stdout.WriteString("job=" + os.Getenv(JobVar) + "\n")
 		buf := make([]byte, 64*1024*1024)
 		for i := 0; i < len(buf); i += 4096 {
 			buf[i] = 1
@@ -42,6 +43,8 @@ func setup(t *testing.T, helper string) (*platform.Platform, Options, *bytes.Buf
 	os.Unsetenv("CI")
 	t.Setenv("VITEST_MAX_WORKERS", "")
 	os.Unsetenv("VITEST_MAX_WORKERS")
+	t.Setenv(JobVar, "")
+	os.Unsetenv(JobVar)
 	p := platform.Native(platform.Paths{Data: dir, Runtime: dir})
 	exe, err := os.Executable()
 	if err != nil {
@@ -70,6 +73,9 @@ func TestRunWithLockFallback(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "workers=") || strings.Contains(out.String(), "workers=\n") {
 		t.Fatalf("VITEST_MAX_WORKERS not set: %q", out)
+	}
+	if !strings.Contains(out.String(), "job=1\n") {
+		t.Fatalf("%s not set for the gated command: %q", JobVar, out)
 	}
 	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
 	key := gate.Request{Command: o.Args[0], Dir: o.Dir}.Key()
@@ -126,6 +132,29 @@ func TestRunDisabledPassesThrough(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "workers=\n") {
 		t.Fatalf("disabled run set inner parallelism: %q", out)
+	}
+}
+
+func TestRunNestedSkipsTheGate(t *testing.T) {
+	p, o, out := setup(t, "env")
+	o.Nested = true
+	unlock, ok, err := p.Locks.TryLock("slot-0")
+	if err != nil || !ok {
+		t.Fatalf("hold slot: %v %v", ok, err)
+	}
+	defer unlock()
+	done := make(chan int, 1)
+	go func() {
+		code, _ := Run(p, o)
+		done <- code
+	}()
+	select {
+	case code := <-done:
+		if code != 7 {
+			t.Fatalf("exit %d, output %s", code, out)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("nested run waited for the slot held by its outer job")
 	}
 }
 
