@@ -1,10 +1,10 @@
 # Release on a `v*` tag (.github/workflows/release.yaml): binaries for Linux, macOS and Windows
-# The version comes from the tag through Go's VCS stamping (`jobgate version`), so no ldflags
+# The version comes from the tag through Go's VCS stamping (`loadslot version`), so no ldflags
 version: 2
-project_name: jobgate
+project_name: loadslot
 
 builds:
-  - main: ./cmd/jobgate
+  - main: ./cmd/loadslot
     env:
       - CGO_ENABLED=0
     goos: [linux, darwin, windows]

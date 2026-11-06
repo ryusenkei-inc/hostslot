@@ -1,4 +1,4 @@
-module github.com/ryusenkei-inc/jobgate
+module github.com/ryusenkei-inc/loadslot
 
 go 1.26.0
 

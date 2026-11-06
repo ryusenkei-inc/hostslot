@@ -195,7 +195,7 @@ type pipeIPC struct {
 const pipeFile = "daemon.pipe"
 
 func newIPC(p Paths) IPC {
-	return pipeIPC{base: `\\.\pipe\jobgate-` + instanceID(p.Data), file: filepath.Join(p.Runtime, pipeFile)}
+	return pipeIPC{base: `\\.\pipe\loadslot-` + instanceID(p.Data), file: filepath.Join(p.Runtime, pipeFile)}
 }
 
 func (i pipeIPC) current() string {
@@ -277,7 +277,7 @@ func ownerOnlySDDL() (string, error) {
 type mutexLocker struct{ prefix string }
 
 func newLocker(p Paths) Locker {
-	return mutexLocker{prefix: `Local\jobgate-` + instanceID(p.Data) + "-"}
+	return mutexLocker{prefix: `Local\loadslot-` + instanceID(p.Data) + "-"}
 }
 
 // TryLock pins a goroutine to an OS thread for the lifetime of the lock,

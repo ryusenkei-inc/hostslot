@@ -1,5 +1,5 @@
 {
-  "name": "jobgate",
+  "name": "loadslot",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.28.0",

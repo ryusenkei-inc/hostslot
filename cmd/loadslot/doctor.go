@@ -7,22 +7,22 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/ryusenkei-inc/jobgate/internal/daemon"
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
-	"github.com/ryusenkei-inc/jobgate/internal/setup"
+	"github.com/ryusenkei-inc/loadslot/internal/daemon"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/setup"
 )
 
-// check is one line of `jobgate doctor`.
+// check is one line of `loadslot doctor`.
 type check struct {
 	level string // ok, info, warn, error
 	text  string
 }
 
-// cmdDoctor reports whether jobgate is installed and wired up, with the fix
+// cmdDoctor reports whether loadslot is installed and wired up, with the fix
 // for each problem. It exits 1 when there are warnings or errors.
 func cmdDoctor(args []string) int {
 	if len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "jobgate doctor: takes no arguments")
+		fmt.Fprintln(os.Stderr, "loadslot doctor: takes no arguments")
 		return 2
 	}
 	exe, err := os.Executable()
@@ -44,31 +44,31 @@ func cmdDoctor(args []string) int {
 			checks = append(checks, c)
 		}
 	}
-	if os.Getenv("JOBGATE_DISABLE") == "1" {
-		checks = append(checks, check{"warn", "JOBGATE_DISABLE=1 is set: commands run without the gate"})
+	if os.Getenv("LOADSLOT_DISABLE") == "1" {
+		checks = append(checks, check{"warn", "LOADSLOT_DISABLE=1 is set: commands run without the gate"})
 	}
 	return printChecks(os.Stdout, checks)
 }
 
 func pathCheck(exe string) check {
-	onPath, err := exec.LookPath("jobgate")
+	onPath, err := exec.LookPath("loadslot")
 	if err != nil {
-		return check{"info", "jobgate is not on the PATH. Hooks use absolute paths and work anyway; add its directory to the PATH to run jobgate yourself"}
+		return check{"info", "loadslot is not on the PATH. Hooks use absolute paths and work anyway; add its directory to the PATH to run loadslot yourself"}
 	}
 	if sameFile(onPath, exe) {
 		return check{"ok", "on the PATH as " + onPath}
 	}
-	return check{"warn", "jobgate on the PATH (" + onPath + ") is another file than this one. Remove the copy you don't use, or ignore this for a package manager's shim"}
+	return check{"warn", "loadslot on the PATH (" + onPath + ") is another file than this one. Remove the copy you don't use, or ignore this for a package manager's shim"}
 }
 
 func daemonCheck(p *platform.Platform) check {
 	s, err := daemon.QueryStatus(p)
 	if err != nil {
-		return check{"info", "daemon not running; the next jobgate run starts it"}
+		return check{"info", "daemon not running; the next loadslot run starts it"}
 	}
 	text := fmt.Sprintf("daemon pid %d %s, slots %d/%d used, %d MB free", s.PID, s.Version, s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB)
 	if daemon.Older(s.Version, daemon.Version()) {
-		return check{"warn", text + ": older than this jobgate; the next jobgate run retires it"}
+		return check{"warn", text + ": older than this loadslot; the next loadslot run retires it"}
 	}
 	return check{"ok", text}
 }
@@ -87,16 +87,16 @@ func hookCheck(a setup.Agent, exe string) (check, bool) {
 	case !found && !setup.Detected(a):
 		return check{}, false
 	case !found:
-		return check{"warn", fmt.Sprintf("%s: hook not registered in %s. Run: jobgate setup", a, file)}, true
+		return check{"warn", fmt.Sprintf("%s: hook not registered in %s. Run: loadslot setup", a, file)}, true
 	}
 	hookExe := filepath.FromSlash(setup.HookExe(command, a))
 	if _, err := os.Stat(hookExe); err != nil {
 		if _, lookErr := exec.LookPath(hookExe); lookErr != nil {
-			return check{"error", fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: jobgate setup", a, hookExe)}, true
+			return check{"error", fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: loadslot setup", a, hookExe)}, true
 		}
 	}
 	if resolved, err := exec.LookPath(hookExe); err == nil && !sameFile(resolved, exe) {
-		return check{"warn", fmt.Sprintf("%s: the hook runs another jobgate (%s). Run: jobgate setup", a, hookExe)}, true
+		return check{"warn", fmt.Sprintf("%s: the hook runs another loadslot (%s). Run: loadslot setup", a, hookExe)}, true
 	}
 	return check{"ok", fmt.Sprintf("%s: hook registered in %s", a, file)}, true
 }

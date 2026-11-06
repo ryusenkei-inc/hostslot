@@ -8,7 +8,7 @@ import (
 )
 
 // object is a JSON object that keeps the order of its keys, so a settings
-// file is rewritten without reordering what jobgate does not touch.
+// file is rewritten without reordering what loadslot does not touch.
 type object []member
 
 type member struct {

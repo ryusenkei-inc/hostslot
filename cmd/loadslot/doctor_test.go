@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryusenkei-inc/jobgate/internal/setup"
+	"github.com/ryusenkei-inc/loadslot/internal/setup"
 )
 
 func TestHookCheck(t *testing.T) {
@@ -22,7 +22,7 @@ func TestHookCheck(t *testing.T) {
 	if c, ok := hookCheck(setup.Claude, exe); !ok || c.level != "warn" || !strings.Contains(c.text, "not registered") {
 		t.Fatalf("unregistered: %+v %v", c, ok)
 	}
-	if _, err := setup.Register(settings, setup.Claude, setup.HookCommand(filepath.Join(dir, "gone", "jobgate"), setup.Claude), false, false); err != nil {
+	if _, err := setup.Register(settings, setup.Claude, setup.HookCommand(filepath.Join(dir, "gone", "loadslot"), setup.Claude), false, false); err != nil {
 		t.Fatal(err)
 	}
 	if c, _ := hookCheck(setup.Claude, exe); c.level != "error" || !strings.Contains(c.text, "does not exist") {

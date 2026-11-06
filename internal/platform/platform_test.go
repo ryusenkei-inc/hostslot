@@ -12,7 +12,7 @@ import (
 // TestMain doubles as the child process for tracker tests, so they need no
 // external programs.
 func TestMain(m *testing.M) {
-	switch os.Getenv("JOBGATE_TEST_HELPER") {
+	switch os.Getenv("LOADSLOT_TEST_HELPER") {
 	case "alloc":
 		buf := make([]byte, 96*mib)
 		for i := range buf {
@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 	case "tree":
 		exe, _ := os.Executable()
 		cmd := exec.Command(exe)
-		cmd.Env = append(os.Environ(), "JOBGATE_TEST_HELPER=alloc")
+		cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=alloc")
 		err := cmd.Run()
 		var exit *exec.ExitError
 		if errors.As(err, &exit) {
@@ -75,7 +75,7 @@ func TestTrackerTreePeakAndExitCode(t *testing.T) {
 		t.Skip("tree memory not supported")
 	}
 	cmd := exec.Command(self(t))
-	cmd.Env = append(os.Environ(), "JOBGATE_TEST_HELPER=tree")
+	cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=tree")
 	proc, err := p.Tracker.Start(cmd)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +96,7 @@ func TestTrackerCurrentMemory(t *testing.T) {
 		t.Skip("tree memory not supported")
 	}
 	cmd := exec.Command(self(t))
-	cmd.Env = append(os.Environ(), "JOBGATE_TEST_HELPER=tree")
+	cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=tree")
 	proc, err := p.Tracker.Start(cmd)
 	if err != nil {
 		t.Fatal(err)
@@ -126,7 +126,7 @@ func TestTrackerCurrentMemory(t *testing.T) {
 func TestTrackerKillTree(t *testing.T) {
 	p := testPlatform(t)
 	cmd := exec.Command(self(t))
-	cmd.Env = append(os.Environ(), "JOBGATE_TEST_HELPER=sleep")
+	cmd.Env = append(os.Environ(), "LOADSLOT_TEST_HELPER=sleep")
 	proc, err := p.Tracker.Start(cmd)
 	if err != nil {
 		t.Fatal(err)

@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryusenkei-inc/jobgate/internal/gate"
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
-	"github.com/ryusenkei-inc/jobgate/internal/store"
+	"github.com/ryusenkei-inc/loadslot/internal/gate"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/store"
 )
 
 // ErrRunning is returned by Run when another daemon holds the daemon lock.

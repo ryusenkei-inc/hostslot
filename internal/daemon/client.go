@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ryusenkei-inc/jobgate/internal/gate"
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
-	"github.com/ryusenkei-inc/jobgate/internal/store"
+	"github.com/ryusenkei-inc/loadslot/internal/gate"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/store"
 )
 
 // LogFile is the daemon's stdout and stderr inside the data directory.
@@ -43,7 +43,7 @@ func Connect(p *platform.Platform) (net.Conn, error) {
 	}
 }
 
-// Spawn starts `jobgate daemon` detached from the current process.
+// Spawn starts `loadslot daemon` detached from the current process.
 func Spawn(p *platform.Platform) error {
 	exe, err := os.Executable()
 	if err != nil {

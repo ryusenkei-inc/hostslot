@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-jobgate（重いジョブの実行をマシン全体で調整する CLI と、その Orca のプラグイン）。構成・コマンドは [README.md](README.md)
+loadslot（重いジョブの実行をマシン全体で調整する CLI と、その Orca のプラグイン）。構成・コマンドは [README.md](README.md)
 
 ## このリポの規約
 
@@ -8,7 +8,7 @@ jobgate（重いジョブの実行をマシン全体で調整する CLI と、�
 - 英語: README・issue・PR のタイトルと本文・コミットメッセージ・コードのコメント（共通の規約の「日本語」より優先）
   - prose-lint の `commit/subject-ja`: `prose-lint.json` で無効化
 - 構成: ルートに CLI の Go のモジュール、`apps/*` に TypeScript のパッケージ（pnpm のワークスペース）
-  - Go のモジュールはルートから移動しない（`go install …/cmd/jobgate@latest` と `v*` のタグを維持）
+  - Go のモジュールはルートから移動しない（`go install …/cmd/loadslot@latest` と `v*` のタグを維持）
 - `apps/orca-plugin`: 実行時の依存なし（Orca が TypeScript をそのまま読み込む）
   - パスは固定: 移動すると Orca の上で別のリポの扱い
 - テスト: 対象と同じディレクトリ

@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ryusenkei-inc/jobgate/internal/gate"
-	"github.com/ryusenkei-inc/jobgate/internal/jobkey"
-	"github.com/ryusenkei-inc/jobgate/internal/platform"
-	"github.com/ryusenkei-inc/jobgate/internal/store"
+	"github.com/ryusenkei-inc/loadslot/internal/gate"
+	"github.com/ryusenkei-inc/loadslot/internal/jobkey"
+	"github.com/ryusenkei-inc/loadslot/internal/platform"
+	"github.com/ryusenkei-inc/loadslot/internal/store"
 )
 
 // TestMain doubles as the wrapped command.
 func TestMain(m *testing.M) {
-	switch os.Getenv("JOBGATE_TEST_HELPER") {
+	switch os.Getenv("LOADSLOT_TEST_HELPER") {
 	case "env":
 		os.Stdout.WriteString("workers=" + os.Getenv("VITEST_MAX_WORKERS") + "\n")
 		os.Stdout.WriteString("job=" + os.Getenv(JobVar) + "\n")
@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
 	case "touch":
-		os.WriteFile(os.Getenv("JOBGATE_TEST_MARKER"), nil, 0o600)
+		os.WriteFile(os.Getenv("LOADSLOT_TEST_MARKER"), nil, 0o600)
 		os.Exit(0)
 	}
 	os.Exit(m.Run())
@@ -39,10 +39,10 @@ func TestMain(m *testing.M) {
 func setup(t *testing.T, helper string) (*platform.Platform, Options, *bytes.Buffer) {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("JOBGATE_TEST_HELPER", helper)
-	t.Setenv("JOBGATE_SLOTS", "1")
-	t.Setenv("JOBGATE_COST_MB", "")
-	t.Setenv("JOBGATE_RESERVE_MB", "")
+	t.Setenv("LOADSLOT_TEST_HELPER", helper)
+	t.Setenv("LOADSLOT_SLOTS", "1")
+	t.Setenv("LOADSLOT_COST_MB", "")
+	t.Setenv("LOADSLOT_RESERVE_MB", "")
 	t.Setenv("CI", "")
 	os.Unsetenv("CI")
 	t.Setenv("VITEST_MAX_WORKERS", "")
@@ -103,7 +103,7 @@ func TestRunLearnsUnderTheLabel(t *testing.T) {
 func TestRunWaitsForSlot(t *testing.T) {
 	p, o, _ := setup(t, "touch")
 	marker := filepath.Join(p.Paths.Data, "ran")
-	t.Setenv("JOBGATE_TEST_MARKER", marker)
+	t.Setenv("LOADSLOT_TEST_MARKER", marker)
 
 	unlock, ok, err := p.Locks.TryLock("slot-0")
 	if err != nil || !ok {
@@ -153,7 +153,7 @@ func TestRunDisabledPassesThrough(t *testing.T) {
 func TestRunGivesUpAfterMaxWait(t *testing.T) {
 	p, o, out := setup(t, "touch")
 	marker := filepath.Join(p.Paths.Data, "ran")
-	t.Setenv("JOBGATE_TEST_MARKER", marker)
+	t.Setenv("LOADSLOT_TEST_MARKER", marker)
 	o.MaxWait = 600 * time.Millisecond
 	unlock, ok, err := p.Locks.TryLock("slot-0")
 	if err != nil || !ok {
@@ -215,7 +215,7 @@ func TestRunNestedSkipsTheGate(t *testing.T) {
 
 func TestRunCommandNotFound(t *testing.T) {
 	p, o, _ := setup(t, "")
-	o.Args = []string{"jobgate-no-such-command"}
+	o.Args = []string{"loadslot-no-such-command"}
 	code, err := Run(p, o)
 	if err != nil || code != 127 {
 		t.Fatalf("code %d err %v", code, err)
@@ -228,11 +228,11 @@ func TestWithWorkers(t *testing.T) {
 	if !strings.Contains(joined, "VITEST_MAX_WORKERS=9") || strings.Contains(joined, "VITEST_MAX_WORKERS=3") {
 		t.Fatalf("existing value overwritten: %v", env)
 	}
-	if !strings.Contains(joined, "npm_config_workspace_concurrency=3") || !strings.Contains(joined, "pnpm_config_workspace_concurrency=3") || !strings.Contains(joined, "JOBGATE_WORKERS=3") {
+	if !strings.Contains(joined, "npm_config_workspace_concurrency=3") || !strings.Contains(joined, "pnpm_config_workspace_concurrency=3") || !strings.Contains(joined, "LOADSLOT_WORKERS=3") {
 		t.Fatalf("missing vars: %v", env)
 	}
 	ci := strings.Join(withWorkers([]string{"CI=true"}, 3), " ")
-	if strings.Contains(ci, "npm_config") || !strings.Contains(ci, "JOBGATE_WORKERS=3") {
+	if strings.Contains(ci, "npm_config") || !strings.Contains(ci, "LOADSLOT_WORKERS=3") {
 		t.Fatalf("CI handling: %v", ci)
 	}
 }
