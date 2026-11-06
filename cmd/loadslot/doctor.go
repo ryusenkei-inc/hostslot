@@ -21,7 +21,14 @@ type check struct {
 	// Fix names the command that fixes the problem ("setup"), so the Orca
 	// plugin can offer to run it.
 	Fix string `json:"fix,omitempty"`
+	// Title and Detail say a warning or error briefly, for a panel; Text
+	// is the full line for the terminal.
+	Title  string `json:"title,omitempty"`
+	Detail string `json:"detail,omitempty"`
 }
+
+// agentNames are the agents as people know them.
+var agentNames = map[setup.Agent]string{setup.Claude: "Claude Code", setup.Codex: "Codex"}
 
 // cmdDoctor reports whether loadslot is installed and wired up, with the fix
 // for each problem. It exits 1 when there are warnings or errors.
@@ -40,10 +47,14 @@ func cmdDoctor(args []string) int {
 	}
 	checks := []check{{Level: "ok", Text: version() + " at " + exe}}
 	checks = append(checks, pathCheck(exe))
+	if c, ok := legacyCheck(); ok {
+		checks = append(checks, c)
+	}
 	if p, err := nativePlatform(); err == nil {
 		checks = append(checks, daemonCheck(p))
 	} else {
-		checks = append(checks, check{Level: "error", Text: "data directory: " + err.Error()})
+		checks = append(checks, check{Level: "error", Text: "data directory: " + err.Error(),
+			Title: "The data directory can't be used", Detail: err.Error()})
 	}
 	for _, a := range setup.Agents {
 		if c, ok := hookCheck(a, exe); ok {
@@ -51,7 +62,8 @@ func cmdDoctor(args []string) int {
 		}
 	}
 	if os.Getenv("LOADSLOT_DISABLE") == "1" {
-		checks = append(checks, check{Level: "warn", Text: "LOADSLOT_DISABLE=1 is set: commands run without the gate"})
+		checks = append(checks, check{Level: "warn", Text: "LOADSLOT_DISABLE=1 is set: commands run without the gate",
+			Title: "loadslot is turned off", Detail: "LOADSLOT_DISABLE=1 is set, so commands run without the gate."})
 	}
 	if *asJSON {
 		code := 0
@@ -78,7 +90,20 @@ func pathCheck(exe string) check {
 	}
 	// Typical after updating from the Orca panel over a copy installed by
 	// hand: the plugin installs into its own directory.
-	return check{Level: "warn", Text: fmt.Sprintf("loadslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe))}
+	return check{Level: "warn", Text: fmt.Sprintf("loadslot on the PATH (%s) is another file than this one (%s). To keep this one, delete the other and add %s to the PATH; ignore this for a package manager's shim", onPath, exe, filepath.Dir(exe)),
+		Title: "Another loadslot is on the PATH", Detail: fmt.Sprintf("%s runs in terminals. Delete it and add %s to the PATH.", onPath, filepath.Dir(exe))}
+}
+
+// legacyCheck finds a copy under loadslot's former name: scripts that fall
+// back to `jobgate` when `loadslot` isn't on their PATH would start an old
+// daemon with it.
+func legacyCheck() (check, bool) {
+	old, err := exec.LookPath("jobgate")
+	if err != nil {
+		return check{}, false
+	}
+	return check{Level: "warn", Text: fmt.Sprintf("jobgate, loadslot's former name, is on the PATH (%s); scripts that fall back to it start an old daemon. Delete it", old),
+		Title: "An old copy named jobgate is on the PATH", Detail: fmt.Sprintf("Scripts that fall back to it start an old daemon. Delete %s.", old)}, true
 }
 
 func daemonCheck(p *platform.Platform) check {
@@ -88,7 +113,8 @@ func daemonCheck(p *platform.Platform) check {
 	}
 	text := fmt.Sprintf("daemon pid %d %s, slots %d/%d used, %d MB free", s.PID, s.Version, s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB)
 	if daemon.Older(s.Version, daemon.Version()) {
-		return check{Level: "warn", Text: text + ": older than this loadslot; the next loadslot run retires it"}
+		return check{Level: "warn", Text: text + ": older than this loadslot; the next loadslot run retires it", Fix: "setup",
+			Title: "An older daemon is running", Detail: fmt.Sprintf("%s (pid %d). The next heavy command replaces it.", s.Version, s.PID)}
 	}
 	return check{Level: "ok", Text: text}
 }
@@ -96,27 +122,33 @@ func daemonCheck(p *platform.Platform) check {
 // hookCheck checks an agent's hook. It reports nothing for an agent that is
 // neither installed nor configured.
 func hookCheck(a setup.Agent, exe string) (check, bool) {
+	name := agentNames[a]
 	file, err := setup.SettingsPath(a)
 	if err != nil {
-		return check{Level: "error", Text: string(a) + ": " + err.Error()}, true
+		return check{Level: "error", Text: string(a) + ": " + err.Error(),
+			Title: name + "'s settings can't be found", Detail: err.Error()}, true
 	}
 	command, found, err := setup.Find(file, a)
 	switch {
 	case err != nil:
-		return check{Level: "error", Text: fmt.Sprintf("%s: cannot read %s: %v", a, file, err)}, true
+		return check{Level: "error", Text: fmt.Sprintf("%s: cannot read %s: %v", a, file, err),
+			Title: name + "'s settings can't be read", Detail: err.Error()}, true
 	case !found && !setup.Detected(a):
 		return check{}, false
 	case !found:
-		return check{Level: "warn", Text: fmt.Sprintf("%s: hook not registered in %s. Run: loadslot setup", a, file), Fix: "setup"}, true
+		return check{Level: "warn", Text: fmt.Sprintf("%s: hook not registered in %s. Run: loadslot setup", a, file), Fix: "setup",
+			Title: name + " isn't connected", Detail: "No loadslot hook in " + file + "."}, true
 	}
 	hookExe := filepath.FromSlash(setup.HookExe(command, a))
 	if _, err := os.Stat(hookExe); err != nil {
 		if _, lookErr := exec.LookPath(hookExe); lookErr != nil {
-			return check{Level: "error", Text: fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: loadslot setup", a, hookExe), Fix: "setup"}, true
+			return check{Level: "error", Text: fmt.Sprintf("%s: the hook runs %s, which does not exist. Run: loadslot setup", a, hookExe), Fix: "setup",
+				Title: name + "'s hook points to a missing file", Detail: hookExe + " doesn't exist."}, true
 		}
 	}
 	if resolved, err := exec.LookPath(hookExe); err == nil && !sameFile(resolved, exe) {
-		return check{Level: "warn", Text: fmt.Sprintf("%s: the hook runs another loadslot (%s). Run: loadslot setup", a, hookExe), Fix: "setup"}, true
+		return check{Level: "warn", Text: fmt.Sprintf("%s: the hook runs another loadslot (%s). Run: loadslot setup", a, hookExe), Fix: "setup",
+			Title: name + "'s hook runs another loadslot", Detail: hookExe + "."}, true
 	}
 	return check{Level: "ok", Text: fmt.Sprintf("%s: hook registered in %s", a, file)}, true
 }

@@ -49,9 +49,17 @@ export type Status = {
   recent?: Finished[];
 };
 
-/** A check of `loadslot doctor --json`, or one the plugin adds. */
-/** A line of `loadslot doctor --json`; `fix` names the command that fixes it. */
-export type Problem = { level: 'ok' | 'info' | 'warn' | 'error'; text: string; fix?: 'setup' };
+/**
+ * A check of `loadslot doctor --json`, or one the plugin adds: the full line,
+ * the command that fixes it, and a title and detail for the panel.
+ */
+export type Problem = {
+  level: 'ok' | 'info' | 'warn' | 'error';
+  text: string;
+  fix?: 'setup';
+  title?: string;
+  detail?: string;
+};
 
 type Tone = 'neutral' | 'accent' | 'success' | 'warning' | 'danger';
 
@@ -84,7 +92,7 @@ export function summarize(s: Status, problems: Problem[] = []): Item {
   const lines = describe(s).split('\n');
   const summary = lines.filter((l) => !l.startsWith(' ') && !l.endsWith(':'));
   const first = problems[0];
-  const issue = first ? [`! ${first.text}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`] : [];
+  const issue = first ? [`! ${first.title ?? first.text}${problems.length > 1 ? ` (+${problems.length - 1} more)` : ''}`] : [];
   return {
     text: `loadslot ${parts.join(' · ')}`,
     tone,
@@ -109,7 +117,10 @@ export function describe(s: Status, now = Date.now()): string {
   const lines = [
     `${s.mode}${s.version ? ` ${s.version}` : ''}: ${used} of ${slots} slots used, ${gb(s.memory.freeMB)} of ${gb(s.memory.totalMB)} free, ${s.cpus} CPUs`,
   ];
-  if (s.room !== undefined) lines.push(`Room for ${s.room} more heavy ${s.room === 1 ? 'job' : 'jobs'} now`);
+  // Room says more than the free slots only when memory is what limits it.
+  if (s.room !== undefined && s.room < slots - used) {
+    lines.push(`Room for ${s.room} more heavy ${s.room === 1 ? 'job' : 'jobs'} now (memory)`);
+  }
   const list = (title: string, jobs: Job[], since: (j: Job) => string | undefined) => {
     if (jobs.length === 0) return;
     lines.push(`${title}:`);

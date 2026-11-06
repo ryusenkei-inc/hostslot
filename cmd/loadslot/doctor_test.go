@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -62,5 +63,24 @@ func TestSetupReportMarshalsForIntegrations(t *testing.T) {
 	b, err := json.Marshal(r)
 	if err != nil || string(b) != `{"agents":[{"agent":"codex","file":"h.json","result":"added"}],"retired":true}` {
 		t.Fatalf("%s %v", b, err)
+	}
+}
+
+func TestLegacyCheckFindsTheFormerName(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PATH", dir)
+	if _, ok := legacyCheck(); ok {
+		t.Fatal("warned without a jobgate on the PATH")
+	}
+	name := "jobgate"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c, ok := legacyCheck()
+	if !ok || c.Level != "warn" || c.Title == "" || !strings.Contains(c.Detail, dir) {
+		t.Fatalf("got %+v %v", c, ok)
 	}
 }

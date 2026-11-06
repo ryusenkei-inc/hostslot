@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { install, installedPath, offer, setupItems } from './install.ts';
 import { type Item, type Problem, type Status, summarize, unavailable } from './status.ts';
 import { older } from './version.ts';
-import { type ActionResult, type Offer, type View, view } from './view.ts';
+import { type ActionResult, type Setup, type View, view } from './view.ts';
 
 /** The part of Orca's worker API this plugin uses (`orca/worker`). */
 type OrcaWorkerApi = {
@@ -79,7 +79,12 @@ async function checkSetup(file: string, plugin: string): Promise<{ problems: Pro
   try {
     binary = (await run(file, ['version'])).replace(/^loadslot\s+/, '').trim();
     if (plugin && older(binary, plugin)) {
-      problems.push({ level: 'warn', text: `loadslot ${binary} is older than this plugin (${plugin}). Install loadslot ${plugin} or later.` });
+      problems.push({
+        level: 'warn',
+        text: `loadslot ${binary} is older than this plugin (${plugin}). Install loadslot ${plugin} or later.`,
+        title: 'loadslot is older than this plugin',
+        detail: `loadslot ${binary}; the plugin needs ${plugin} or later.`,
+      });
     }
   } catch {
     // The status call already reports an unreachable binary.
@@ -100,7 +105,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   let polls = 0;
   const target = installedPath();
   // The install or setup the person started from the panel.
-  let task: Pick<Offer, 'progress' | 'result'> = {};
+  let task: Pick<Setup, 'progress' | 'result'> = {};
 
   const status = async (): Promise<Status | undefined> => {
     for (const file of found ? [found] : candidates()) {
@@ -120,8 +125,8 @@ export default function activate(orca: OrcaWorkerApi): void {
   let state = '';
   const publish = () => {
     current = view(last, reason, problems, checks);
-    const o = { ...offer({ found: Boolean(found), binary, plugin, problems, target }), ...task };
-    if (Object.keys(o).length > 0) current.offer = o;
+    const action = offer({ found: Boolean(found), binary, plugin, problems, target });
+    current.setup = { ...current.setup, ...(action ? { action } : {}), ...task };
     // Posts reach the panel only while it is open; it asks for the latest when it opens.
     orca.panels.post('view', current);
   };
