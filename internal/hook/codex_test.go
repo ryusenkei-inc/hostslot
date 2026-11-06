@@ -49,7 +49,7 @@ func TestCodexGatesHeavyCommandsInPlace(t *testing.T) {
 }
 
 func TestCodexPowerShellPrefix(t *testing.T) {
-	o := CodexOptions{Exe: `C:\Program Files\loadslot\loadslot.exe`, Weight: 2, PowerShell: true}
+	o := CodexOptions{Exe: `C:/Program Files/loadslot/loadslot.exe`, Weight: 2, PowerShell: true}
 	res, raw := runCodex(t, codexEvent(`Set-Location web; go test ./...`, "bypassPermissions"), o)
 	want := `Set-Location web; & 'C:/Program Files/loadslot/loadslot.exe' run --weight 2 --priority background --source codex --as 'go test ./...' -- go test ./...`
 	if res.HookSpecificOutput.UpdatedInput["command"] != want {
