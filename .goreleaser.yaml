@@ -1,0 +1,32 @@
+# Release on a `v*` tag (.github/workflows/release.yaml): binaries for Linux, macOS and Windows
+# The version comes from the tag through Go's VCS stamping (`jobgate version`), so no ldflags
+version: 2
+project_name: jobgate
+
+builds:
+  - main: ./cmd/jobgate
+    env:
+      - CGO_ENABLED=0
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags:
+      - -trimpath
+    # Reproducible: file times from the commit, not the build machine
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  # Squash-merged PR titles are the commit messages on main
+  use: git
+  sort: asc
