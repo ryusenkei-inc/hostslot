@@ -3,9 +3,11 @@ updates:
   # npm（pnpm ワークスペース）。ルートの1件で apps/*・packages/* を横断
   - package-ecosystem: npm
     directory: "/"
-    # 毎日（自社のパッケージの新しいバージョンをすぐ取り込むため）
+    # 月1回（PR ごとの CI による GitHub Actions の消費を抑制）。自社のパッケージを急ぐ場合は手動で `pnpm update "@ryusenkei/*"`
     schedule:
-      interval: daily
+      interval: monthly
+    # 自動の rebase なし（main の更新ごとの CI の再実行を防止）→ マージの前に PR で `@dependabot rebase`
+    rebase-strategy: disabled
     # 公開直後のバージョンは配布ファイルの反映待ちでインストールに失敗しうる → 2日待つ。自社のパッケージは待たない
     cooldown:
       default-days: 2
@@ -30,7 +32,8 @@ updates:
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+    rebase-strategy: disabled
     commit-message:
       prefix: ci
       include: scope
@@ -38,3 +41,22 @@ updates:
       actions:
         patterns:
           - "*"
+
+  # Go のモジュール（ルートに go.mod があるリポのみ `sync` が追加）
+  - package-ecosystem: gomod
+    directory: "/"
+    # 頻度・rebase・公開直後のバージョンの回避は npm と同じ
+    schedule:
+      interval: monthly
+    rebase-strategy: disabled
+    cooldown:
+      default-days: 2
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      # minor・patch は1つの PR にまとめる（Go の major はモジュールのパスが変わるため Dependabot の対象外）
+      minor-and-patch:
+        update-types:
+          - minor
+          - patch
