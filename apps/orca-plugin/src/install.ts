@@ -95,6 +95,10 @@ export async function install(o: InstallOptions): Promise<string> {
   const base = `${releases}/v${o.version}`;
 
   const sums = await get(`${base}/checksums.txt`);
+  if (sums.status === 404) {
+    // A tag's release takes a few minutes to build, so a plugin update can come first.
+    throw new Error(`loadslot ${o.version} is not released on GitHub yet. Try again in a few minutes.`);
+  }
   if (!sums.ok) throw new Error(`checksums.txt of v${o.version}: HTTP ${sums.status}`);
   const expected = parseChecksums(await sums.text()).get(name);
   if (!expected) throw new Error(`checksums.txt of v${o.version} has no ${name}`);

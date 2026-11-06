@@ -87,5 +87,5 @@ it('refuses a download that does not match checksums.txt', async () => {
   await expect(readFile(target)).rejects.toThrow();
 
   const missing = fakeFetch({});
-  await expect(install({ version: '0.5.0', target, platform: 'linux', arch: 'x64', fetch: missing.get })).rejects.toThrow(/HTTP 404/);
+  await expect(install({ version: '0.5.0', target, platform: 'linux', arch: 'x64', fetch: missing.get })).rejects.toThrow(/not released on GitHub yet/);
 });
