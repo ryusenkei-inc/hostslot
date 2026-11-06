@@ -100,19 +100,47 @@ function Waiting({ v }: { v: View }) {
   );
 }
 
+function GuardStops({ v }: { v: View }) {
+  const count = v.guardStops.reduce((n, g) => n + g.rows.length + g.more, 0);
+  if (count === 0) return null;
+  return (
+    <Callout tone="danger" title={`Stopped by a guard (${count})`}>
+      <Stack gap="md">
+        {v.guardStops.map((g) => (
+          <Stack key={g.key} gap="sm">
+            <Text weight="semibold">{g.title}</Text>
+            <Text size="sm" muted>
+              {g.explanation}
+            </Text>
+            <List label={g.title}>
+              {g.rows.map((r) => (
+                <ListItem key={r.key} title={r.title} description={r.where}>
+                  <Row gap="sm" wrap>
+                    <Text size="sm">peak {r.peak}</Text>
+                    <Text size="sm" muted>
+                      <RelativeTime at={r.ended} format="short" muted />
+                    </Text>
+                  </Row>
+                </ListItem>
+              ))}
+            </List>
+            {g.more > 0 ? (
+              <Text size="sm" muted>
+                and {g.more} more, listed in Recent
+              </Text>
+            ) : null}
+          </Stack>
+        ))}
+      </Stack>
+    </Callout>
+  );
+}
+
 function Recent({ v }: { v: View }) {
   if (v.recent.length === 0) return null;
   return (
     <Stack gap="sm">
-      {v.guardStops.length > 0 ? (
-        <Callout tone="danger" title={`Stopped by a guard (${v.guardStops.length})`}>
-          {v.guardStops.map((g) => (
-            <Text key={g} size="sm">
-              {g}
-            </Text>
-          ))}
-        </Callout>
-      ) : null}
+      <GuardStops v={v} />
       <Collapsible title="Recent" description={`${v.recent.length} ended`} defaultOpen>
       <Table
         label="Recent jobs"
