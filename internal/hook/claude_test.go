@@ -94,7 +94,7 @@ func TestClaudeRewritesHeavyBash(t *testing.T) {
 		t.Fatalf("%v: %s", err, out.String())
 	}
 	got := res.HookSpecificOutput
-	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "loadslot run --weight 2 --priority background --source claude --as 'pnpm test' --max-wait 1m0s --timeout 9m0s -- sh -c 'pnpm test'" {
+	if got.HookEventName != "PreToolUse" || got.UpdatedInput["command"] != "loadslot run --weight 2 --priority background --source claude --as 'pnpm test' --max-wait 1m0s --timeout 9m0s -- pnpm test" {
 		t.Fatalf("unexpected output: %s", out.String())
 	}
 	if got.UpdatedInput["timeout"] != float64(600000) {
