@@ -39,6 +39,7 @@ Usage:
   hostslot hook claude|codex [--weight N] [--match REGEX]
   hostslot setup [claude|codex] [--remove] [--dry-run] [--settings PATH]
   hostslot doctor
+  hostslot port [--default PORT] [--json] <name> | --list
   hostslot version
 
 Environment:
@@ -73,6 +74,8 @@ func run(args []string) int {
 		return cmdSetup(args[1:])
 	case "doctor":
 		return cmdDoctor(args[1:])
+	case "port":
+		return cmdPort(args[1:])
 	case "version", "--version":
 		fmt.Println(version())
 		return 0
