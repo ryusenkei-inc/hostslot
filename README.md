@@ -38,6 +38,7 @@ Requires Go 1.26 or later. Make sure `$(go env GOPATH)/bin` is on your `PATH`.
 jobgate run [--weight N] [--priority interactive|background] -- <command> [args...]
 jobgate status [--json]
 jobgate daemon [--idle 10m]
+jobgate hook claude [--weight N] [--match REGEX]
 jobgate version
 ```
 
@@ -47,6 +48,7 @@ jobgate version
 - Ctrl+C reaches the command as usual, and jobgate waits for it to exit and releases the slot. A second Ctrl+C kills the whole process tree.
 - `status` shows the slots, free memory, running jobs (command, weight, estimated memory) and waiting jobs. Without a daemon, it shows how many slot locks are held.
 - `daemon` runs the daemon in the foreground. You don't need to start it yourself.
+- `hook claude` is a Claude Code hook (see [Claude Code](#claude-code)).
 
 Example:
 
@@ -71,26 +73,7 @@ waiting (1)
 
 ### Claude Code
 
-A `PreToolUse` hook can rewrite heavy Bash commands to run through jobgate. Save this as `~/.claude/hooks/jobgate.mjs` (or in a repository's `.claude/hooks/`), and adjust the pattern to your commands:
-
-```js
-import { readFileSync } from 'node:fs';
-
-const input = JSON.parse(readFileSync(0, 'utf8'));
-const command = input.tool_input?.command ?? '';
-const heavy = /^(pnpm|npm|yarn|bun)\s+(run\s+)?(check|test|build|lint|typecheck)\b|^(npx\s+)?(vitest|tsc|jest|playwright)\b|^go\s+(test|build)\b|^cargo\s+(test|build|clippy)\b/;
-if (heavy.test(command) && !command.startsWith('jobgate ')) {
-  const quoted = `'${command.replaceAll("'", `'\\''`)}'`;
-  console.log(JSON.stringify({
-    hookSpecificOutput: {
-      hookEventName: 'PreToolUse',
-      updatedInput: { ...input.tool_input, command: `jobgate run --priority background -- sh -c ${quoted}` },
-    },
-  }));
-}
-```
-
-Register it in `~/.claude/settings.json` to cover every repository:
+`jobgate hook claude` is a `PreToolUse` hook that rewrites heavy Bash commands to run through jobgate. Register it in `~/.claude/settings.json` to cover every repository:
 
 ```json
 {
@@ -98,12 +81,18 @@ Register it in `~/.claude/settings.json` to cover every repository:
     "PreToolUse": [
       {
         "matcher": "Bash",
-        "hooks": [{ "type": "command", "command": "node ~/.claude/hooks/jobgate.mjs" }]
+        "hooks": [{ "type": "command", "command": "jobgate hook claude" }]
       }
     ]
   }
 }
 ```
+
+- A command line is heavy when any of its commands (split at `&&`, `||`, `;`, `|`) is a package script `check`, `test`, `build`, `lint` or `typecheck` (also `test:*` and `build:*`), `vitest`, `jest`, `tsc`, `playwright`, `go test|build|vet` or `cargo test|build|check|clippy`. `--match <regex>` replaces this list.
+- The whole line becomes `jobgate run --weight 1 --priority background -- sh -c '<line>'`. `--weight` sets the weight hint. A `cd` inside a rewritten line doesn't carry over to the next command.
+- Light commands (`git`, `pnpm install`, formatters, prose linters) are left alone, so they never wait. `git push` is left alone too: gate the `pre-push` hook instead (see below).
+- On invalid input, the hook exits 1, which Claude Code reports without blocking the command. With `JOBGATE_DISABLE=1`, it does nothing.
+- Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it.
 
 Time spent waiting for a slot counts toward the Bash tool's timeout.
 
@@ -115,6 +104,8 @@ Time spent waiting for a slot counts toward the Bash tool's timeout.
 #!/bin/sh
 exec jobgate run --weight 2 -- pnpm check
 ```
+
+The shared `pre-push` of [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) 0.3.1 or later does this when jobgate is on the `PATH`.
 
 ### Package scripts
 
@@ -185,12 +176,13 @@ Limitations:
 
 | Path | Purpose | Depends on |
 | --- | --- | --- |
-| `cmd/jobgate` | CLI: `run`, `status`, `daemon` | `internal/*` |
+| `cmd/jobgate` | CLI: `run`, `status`, `daemon`, `hook` | `internal/*` |
 | `internal/gate` | Scheduler core, OS-independent and pure: slots, admission, priority, learning estimates | — |
 | `internal/platform` | OS ports: metrics, process tracking, IPC, locks, paths. One file per OS, selected by build tags | — |
 | `internal/store` | Learning samples in `samples.json` | — |
 | `internal/config` | `config.json` and environment overrides | `internal/gate` |
 | `internal/daemon` | Daemon and client: admission over IPC, started on demand | `internal/gate`, `internal/platform`, `internal/store` |
+| `internal/hook` | Agent hooks: rewrite heavy commands to `jobgate run`, text only | — |
 | `internal/runner` | `jobgate run`: acquire (daemon or lock fallback), run, release, record | all of the above |
 | `scripts/` | Repository operations, such as managing `.env` | — |
 

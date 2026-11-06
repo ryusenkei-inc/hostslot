@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/ryusenkei-inc/jobgate/internal/config"
 	"github.com/ryusenkei-inc/jobgate/internal/daemon"
 	"github.com/ryusenkei-inc/jobgate/internal/gate"
+	"github.com/ryusenkei-inc/jobgate/internal/hook"
 	"github.com/ryusenkei-inc/jobgate/internal/platform"
 	"github.com/ryusenkei-inc/jobgate/internal/runner"
 	"github.com/ryusenkei-inc/jobgate/internal/store"
@@ -29,6 +31,7 @@ Usage:
   jobgate run [--weight N] [--priority interactive|background] -- <command> [args...]
   jobgate status [--json]
   jobgate daemon
+  jobgate hook claude [--weight N] [--match REGEX]
   jobgate version
 
 Environment:
@@ -57,6 +60,8 @@ func run(args []string) int {
 		return cmdStatus(args[1:])
 	case "daemon":
 		return cmdDaemon(args[1:])
+	case "hook":
+		return cmdHook(args[1:])
 	case "version", "--version":
 		fmt.Println(version())
 		return 0
@@ -146,6 +151,39 @@ func resolvePriority(flagValue string) (gate.Priority, error) {
 		return 0, fmt.Errorf("unknown priority %q (interactive or background)", v)
 	}
 	return p, nil
+}
+
+// cmdHook exits 1 on errors: Claude Code reports exit 1 as a non-blocking
+// hook error and runs the command unchanged, while 2 would block it.
+func cmdHook(args []string) int {
+	if len(args) == 0 || args[0] != "claude" {
+		fmt.Fprintln(os.Stderr, "jobgate hook: missing agent (jobgate hook claude)")
+		return 1
+	}
+	fs := flag.NewFlagSet("hook claude", flag.ContinueOnError)
+	weight := fs.Int("weight", 1, "weight of the wrapped commands; a hint until samples exist")
+	match := fs.String("match", "", "regular expression for the commands to gate (default: built-in list)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return 1
+	}
+	if os.Getenv("JOBGATE_DISABLE") == "1" {
+		_, _ = io.Copy(io.Discard, os.Stdin)
+		return 0
+	}
+	o := hook.ClaudeOptions{Weight: *weight}
+	if *match != "" {
+		re, err := regexp.Compile(*match)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "jobgate hook: --match: %v\n", err)
+			return 1
+		}
+		o.Heavy = re
+	}
+	if err := hook.Claude(os.Stdin, os.Stdout, o); err != nil {
+		fmt.Fprintf(os.Stderr, "jobgate hook: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func cmdDaemon(args []string) int {
