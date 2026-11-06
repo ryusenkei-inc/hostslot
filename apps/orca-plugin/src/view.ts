@@ -60,7 +60,18 @@ export type Offer = {
   /** What the worker is doing now. */
   progress?: string;
   /** How the last install or setup went. */
-  result?: { ok: boolean; text: string };
+  result?: ActionResult;
+};
+
+/** The outcome of an install or setup, item by item, and what is left to do. */
+export type ActionResult = {
+  ok: boolean;
+  title: string;
+  items: { label: string; value: string }[];
+  /** A step only the person can take, such as trusting a hook in Codex. */
+  next?: string;
+  /** Why it failed. */
+  text?: string;
 };
 
 /** Recent jobs one guard stopped, with why in one sentence. */

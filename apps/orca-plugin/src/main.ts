@@ -5,10 +5,10 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { install, installedPath, offer } from './install.ts';
+import { install, installedPath, offer, setupItems } from './install.ts';
 import { type Item, type Problem, type Status, summarize, unavailable } from './status.ts';
 import { older } from './version.ts';
-import { type Offer, type View, view } from './view.ts';
+import { type ActionResult, type Offer, type View, view } from './view.ts';
 
 /** The part of Orca's worker API this plugin uses (`orca/worker`). */
 type OrcaWorkerApi = {
@@ -128,38 +128,47 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   // Runs one install or setup at a time, showing its progress, then checks
   // everything again (another binary may be the one to use now).
-  const act = async (steps: (say: (progress: string) => void) => Promise<string>) => {
+  const act = async (steps: (say: (progress: string) => void) => Promise<ActionResult>) => {
     if (task.progress) return;
     const say = (progress: string) => {
       task = { progress };
       publish();
     };
     try {
-      task = { result: { ok: true, text: await steps(say) } };
+      task = { result: await steps(say) };
     } catch (err) {
-      task = { result: { ok: false, text: err instanceof Error ? err.message : String(err) } };
+      const text = err instanceof Error ? err.message : String(err);
+      task = { result: { ok: false, title: 'Could not finish', items: [], text } };
     }
-    orca.log(`${task.result?.ok ? 'done' : 'failed'}: ${task.result?.text}`);
+    orca.log(`${task.result?.title}: ${JSON.stringify(task.result)}`);
     found = undefined;
     checkedFile = undefined;
     await refresh().catch((err) => orca.log(`refresh: ${err}`));
   };
 
-  const setup = async (file: string) => (await run(file, ['setup'], SETUP_MS)).trim() || 'loadslot setup finished';
+  // An older loadslot has no `setup --json`; its text output becomes one item.
+  const setup = async (file: string) =>
+    setupItems(await run(file, ['setup', '--json'], SETUP_MS).catch(() => run(file, ['setup'], SETUP_MS)));
 
   orca.panels.handle('install', () =>
     act(async (say) => {
       say(`Downloading loadslot ${plugin}…`);
       await install({ version: plugin, target });
       say("Registering the agents' hooks…");
-      return `Installed loadslot ${plugin} at ${target}. ${await setup(target)}`;
+      const { items, next } = await setup(target);
+      const result: ActionResult = { ok: true, title: `Installed loadslot ${plugin}`, items: [{ label: 'Location', value: target }, ...items] };
+      if (next) result.next = next;
+      return result;
     }),
   );
   orca.panels.handle('setup', () =>
     act(async (say) => {
       if (!found) throw new Error('loadslot is not installed');
       say("Registering the agents' hooks…");
-      return setup(found);
+      const { items, next } = await setup(found);
+      const result: ActionResult = { ok: true, title: 'Setup done', items };
+      if (next) result.next = next;
+      return result;
     }),
   );
 

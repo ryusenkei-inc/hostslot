@@ -72,6 +72,34 @@ export function offer(o: {
   return out;
 }
 
+const agentNames: Record<string, string> = { claude: 'Claude Code', codex: 'Codex' };
+const setupResults: Record<string, string> = {
+  unchanged: 'already set up',
+  added: 'hook added',
+  updated: 'hook updated',
+  removed: 'hook removed',
+};
+
+/**
+ * The items of `loadslot setup --json` output, and the step left to the
+ * person: Codex runs a new or changed hook only after it is trusted.
+ * Output that isn't JSON (an older loadslot) becomes one item.
+ */
+export function setupItems(out: string): { items: { label: string; value: string }[]; next?: string } {
+  let report: { agents?: { agent: string; result: string }[]; retired?: boolean };
+  try {
+    report = JSON.parse(out);
+  } catch {
+    return { items: [{ label: 'Setup', value: out.trim() || 'finished' }] };
+  }
+  const agents = report.agents ?? [];
+  const items = agents.map((a) => ({ label: agentNames[a.agent] ?? a.agent, value: setupResults[a.result] ?? a.result }));
+  if (items.length === 0) items.push({ label: 'Agents', value: 'none found (Claude Code, Codex)' });
+  if (report.retired) items.push({ label: 'Daemon', value: 'older one retired; the next run starts this version' });
+  const codexChanged = agents.some((a) => a.agent === 'codex' && (a.result === 'added' || a.result === 'updated'));
+  return codexChanged ? { items, next: 'Open Codex and trust the loadslot hook with /hooks. Until then Codex skips it.' } : { items };
+}
+
 type Fetch = (url: string) => Promise<{ ok: boolean; status: number; arrayBuffer(): Promise<ArrayBuffer>; text(): Promise<string> }>;
 
 export type InstallOptions = {

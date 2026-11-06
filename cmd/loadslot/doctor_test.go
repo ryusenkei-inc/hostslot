@@ -56,3 +56,11 @@ func TestChecksMarshalForIntegrations(t *testing.T) {
 		t.Fatalf("%s %v", b, err)
 	}
 }
+
+func TestSetupReportMarshalsForIntegrations(t *testing.T) {
+	r := setupReport{Agents: []agentResult{{Agent: "codex", File: "h.json", Result: "added"}}, Retired: true}
+	b, err := json.Marshal(r)
+	if err != nil || string(b) != `{"agents":[{"agent":"codex","file":"h.json","result":"added"}],"retired":true}` {
+		t.Fatalf("%s %v", b, err)
+	}
+}
