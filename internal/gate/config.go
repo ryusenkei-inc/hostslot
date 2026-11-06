@@ -4,6 +4,7 @@ package gate
 
 import (
 	"math"
+	"slices"
 	"time"
 )
 
@@ -92,9 +93,14 @@ func Ceiling(totalMB uint64, c Config) uint64 {
 }
 
 // Estimate returns the expected peak memory and the effective weight of a
-// job from its recent peaks. Until MinSamples peaks exist, the weight hint
-// sets the floor; afterwards the learned peak decides.
-func Estimate(peaksMB []uint64, weight int, slots int, c Config) (estimateMB uint64, effectiveWeight int) {
+// job from its recent peaks. Until MinSamples peaks exist, a prior from
+// similar work (0 when there is none; see store.Store.Prior) or else the
+// weight hint sets the floor; an explicit weight above 1 still counts.
+// Afterwards a high percentile of the peaks decides rather than their
+// maximum: costs swing between cold and warm runs, and one outlier should not
+// over-reserve every later run. Running jobs' headroom and the per-job
+// ceiling cover a run above it.
+func Estimate(peaksMB []uint64, priorMB uint64, weight int, slots int, c Config) (estimateMB uint64, effectiveWeight int) {
 	c = c.Normalize()
 	weight = max(weight, 1)
 	var peak uint64
@@ -102,10 +108,16 @@ func Estimate(peaksMB []uint64, weight int, slots int, c Config) (estimateMB uin
 		peak = max(peak, p)
 	}
 	hint := uint64(weight) * c.CostMB
+	if priorMB > 0 {
+		hint = priorMB
+		if weight > 1 {
+			hint = max(priorMB, uint64(weight)*c.CostMB)
+		}
+	}
 	if len(peaksMB) < c.MinSamples {
 		estimateMB = max(hint, peak)
 	} else {
-		estimateMB = peak
+		estimateMB = percentile(peaksMB, estimatePercentile)
 	}
 	effectiveWeight = int((estimateMB + c.CostMB - 1) / c.CostMB)
 	if len(peaksMB) < c.MinSamples {
@@ -113,6 +125,17 @@ func Estimate(peaksMB []uint64, weight int, slots int, c Config) (estimateMB uin
 	}
 	effectiveWeight = min(max(effectiveWeight, 1), max(slots, 1))
 	return estimateMB, effectiveWeight
+}
+
+// estimatePercentile of a job's recent peaks is its estimate once learned.
+const estimatePercentile = 0.9
+
+// percentile by nearest rank: with 10 peaks, 0.9 is the second highest.
+func percentile(values []uint64, p float64) uint64 {
+	sorted := slices.Clone(values)
+	slices.Sort(sorted)
+	rank := int(math.Ceil(p*float64(len(sorted)))) - 1
+	return sorted[min(max(rank, 0), len(sorted)-1)]
 }
 
 // Workers returns the inner parallelism for a job holding weight of slots on
