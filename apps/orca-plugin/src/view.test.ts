@@ -109,6 +109,9 @@ it('sums up guard stops; each stopped job stays a row of Recent', () => {
       explanation: 'Each job may use up to 12.0 GB; these used more.',
     },
   ]);
+  const later = view(status({ recent }), '', [], 0, now + 30 * 60_000);
+  expect(later.stops).toEqual([]);
+  expect(later.recent).toHaveLength(6);
 });
 
 it('lists dev servers, running first, and says when one listens elsewhere', () => {

@@ -336,8 +336,11 @@ const guards: { outcome: string; title: string; explanation: (s: Status) => stri
   },
 ];
 
+// Older stops stay rows of Recent but no longer alarm.
+const STOPS_SHOWN_MS = 30 * 60_000;
+
 function guardStops(s: Status, now: number): GuardStops[] {
-  const recent = s.recent ?? [];
+  const recent = (s.recent ?? []).filter((f) => now - time(f.ended, now) < STOPS_SHOWN_MS);
   return guards.flatMap((g) => {
     const stopped = recent.filter((f) => f.outcome === g.outcome);
     const latest = stopped[0];
