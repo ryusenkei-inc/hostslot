@@ -7,6 +7,11 @@
   "version": "0.11.0",
   "description": "Schedules what parallel agents share on one machine: heavy commands wait for free memory and CPU, each worktree's dev server gets its own port, and you see what runs, what waits and why.",
   "license": "MIT",
+  "icon": "docs/images/icon.png",
+  "cover": {
+    "path": "docs/images/cover.png",
+    "alt": "Hostslot's panel in Orca beside its summary: memory, slots, CPU and GPU; running and waiting jobs; dev servers with their own ports"
+  },
   "engines": {
     "orca": ">=1.4.248"
   },
