@@ -85,6 +85,11 @@ type Status struct {
 	// job may use (0: off).
 	ReserveMB uint64 `json:"reserveMB,omitempty"`
 	CeilingMB uint64 `json:"ceilingMB,omitempty"`
+	// CPUBusyPct is how busy all CPUs were lately, in percent; missing when
+	// the OS can't tell.
+	CPUBusyPct *int `json:"cpuBusyPct,omitempty"`
+	// CPUBusyLimitPct is where background jobs stop being admitted.
+	CPUBusyLimitPct int `json:"cpuBusyLimitPct,omitempty"`
 	// Recent are the jobs that ended last, newest first.
 	Recent []Finished `json:"recent,omitempty"`
 }

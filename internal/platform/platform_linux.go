@@ -16,7 +16,10 @@ import (
 
 // ---- Metrics: /proc/meminfo, limited by cgroup v2 ----
 
-type nativeMetrics struct{}
+type nativeMetrics struct{ cpu *cpuMeter }
+
+// CPUBusy implements CPUMeter.
+func (m nativeMetrics) CPUBusy() (float64, bool) { return m.cpu.busy() }
 
 func (nativeMetrics) Memory() (Memory, error) {
 	info, err := readMeminfo("/proc/meminfo")

@@ -113,6 +113,8 @@ export type View = {
   machine?: {
     memory: { usedPct: number; label: string; note?: string; tone: Tone };
     slots: { usedPct: number; label: string };
+    /** Missing when the OS can't tell. */
+    cpu?: { usedPct: number; label: string; tone: Tone };
   };
   running: JobRow[];
   waiting: WaitRow[];
@@ -201,6 +203,15 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
         tone: low ? 'danger' : usedPct > 80 ? 'warning' : 'neutral',
       },
       slots: { usedPct: pct(used, slots), label: `Slots: ${used} of ${slots} in use${room}` },
+      ...(s.cpuBusyPct === undefined
+        ? {}
+        : {
+            cpu: {
+              usedPct: s.cpuBusyPct,
+              label: `CPU: ${s.cpuBusyPct}% busy`,
+              tone: s.cpuBusyLimitPct !== undefined && s.cpuBusyPct >= s.cpuBusyLimitPct ? 'warning' : 'neutral',
+            },
+          }),
     },
     running: running.map((j) => {
       const left = remaining(j, now);
@@ -321,6 +332,7 @@ function guardStops(s: Status, now: number): GuardStops[] {
 function why(j: Job, freeMB: number, heldMB: number, reserveMB: number, i: number): string {
   if (j.reason === 'queue' || (j.reason === undefined && i > 0)) return `behind #${i}`;
   if (j.reason === 'slots') return 'all slots busy';
+  if (j.reason === 'cpu') return 'CPUs busy';
   const available = Math.max(0, freeMB - heldMB - reserveMB);
   return `needs ~${size(j.estimateMB)}, ${size(available)} available`;
 }

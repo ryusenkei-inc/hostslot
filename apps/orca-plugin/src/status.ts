@@ -52,6 +52,10 @@ export type Status = {
   version?: string;
   memory: { totalMB: number; freeMB: number };
   cpus: number;
+  /** How busy all CPUs were lately, in percent (Hostslot 0.11+). */
+  cpuBusyPct?: number;
+  /** Where background jobs stop being admitted, in percent. */
+  cpuBusyLimitPct?: number;
   snapshot: { slots: number; used: number; heldMB?: number; running: Job[]; waiting: Job[] };
   /** How many more weight-1 jobs would start now; missing before hostslot 0.5. */
   room?: number;
@@ -127,7 +131,7 @@ export function unavailable(reason: string): Item {
 export function describe(s: Status, now = Date.now()): string {
   const { slots, used, running, waiting } = s.snapshot;
   const lines = [
-    `${s.mode}${s.version ? ` ${s.version}` : ''}: ${used} of ${slots} slots used, ${gb(s.memory.freeMB)} of ${gb(s.memory.totalMB)} free, ${s.cpus} CPUs`,
+    `${s.mode}${s.version ? ` ${s.version}` : ''}: ${used} of ${slots} slots used, ${gb(s.memory.freeMB)} of ${gb(s.memory.totalMB)} free, ${s.cpus} CPUs${s.cpuBusyPct !== undefined ? ` ${s.cpuBusyPct}% busy` : ''}`,
   ];
   // Room says more than the free slots only when memory is what limits it.
   if (s.room !== undefined && s.room < slots - used) {

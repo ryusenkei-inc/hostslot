@@ -25,6 +25,9 @@ type Config struct {
 	// MinSamples is the number of samples after which the learned peak
 	// replaces the weight hint.
 	MinSamples int `json:"minSamples,omitempty"`
+	// CPUBusyLimit is the busy share of all CPUs at which background jobs
+	// stop being admitted (1 or more turns it off).
+	CPUBusyLimit float64 `json:"cpuBusyLimit,omitempty"`
 	// Warmup is how long a newly admitted job counts as not yet using its
 	// memory, so its estimate is subtracted from the free memory reading.
 	Warmup time.Duration `json:"-"`
@@ -37,6 +40,7 @@ func DefaultConfig() Config {
 		JobCeilingFraction: 0.75,
 		CostMB:             2048,
 		MinSamples:         3,
+		CPUBusyLimit:       0.9,
 		Warmup:             15 * time.Second,
 	}
 }
@@ -55,6 +59,9 @@ func (c Config) Normalize() Config {
 	}
 	if c.MinSamples <= 0 {
 		c.MinSamples = d.MinSamples
+	}
+	if c.CPUBusyLimit <= 0 {
+		c.CPUBusyLimit = d.CPUBusyLimit
 	}
 	if c.Warmup <= 0 {
 		c.Warmup = d.Warmup

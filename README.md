@@ -80,7 +80,7 @@ Hostslot is made for Orca first, and the two do different jobs: Orca runs, shows
 | | |
 | --- | --- |
 | **Slots** | `floor((total memory x 0.6 - reserve) / 2 GB)`, at most half the CPU count, since a heavy command keeps several cores busy: 4 on a 16 GB machine with 8 or more CPUs, 8 on 64 GB with 16 |
-| **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents (6% of total memory, between 1 GB and 4 GB, unless configured). Running jobs that are still growing hold back the rest of their estimate. When nothing runs, the next job always starts |
+| **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents (6% of total memory, between 1 GB and 4 GB, unless configured). Running jobs that are still growing hold back the rest of their estimate. While the CPUs are busier than `cpuBusyLimit` (90%), background jobs wait too. When nothing runs, the next job always starts |
 | **Order** | Interactive jobs (a person at a terminal) before background jobs (agents, scripts), first come first served; the head of the queue blocks later jobs, so a heavy job is never starved |
 | **Learning** | Each command's peak memory and duration, per repository (see [What it learns](#what-it-learns)) |
 | **CPU share** | Background jobs run at a lower OS priority. Each job gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency`, `pnpm_config_workspace_concurrency`, `CARGO_BUILD_JOBS`, `GOFLAGS=-p=N`, `MAKEFLAGS=-jN` and `HOSTSLOT_WORKERS` (not under `CI`, never overriding a set value) |
@@ -159,7 +159,7 @@ Each finished job adds a sample to `samples.json` in the data directory. Nothing
 This repository is also an Orca plugin (`orca-plugin.json` at the root, code in `apps/orca-plugin`).
 
 - **Status bar:** `Hostslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
-- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory and slots; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; dev servers with their URLs, and a warning when one listens elsewhere; jobs a guard stopped; recent outcomes; jobs by repository; setup problems with one button to fix them
+- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory, slots and CPU; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; dev servers with their URLs, and a warning when one listens elsewhere; jobs a guard stopped; recent outcomes; jobs by repository; setup problems with one button to fix them
 - **Install from the panel:** when Hostslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in Hostslot's data directory and runs `hostslot setup`. Nothing is downloaded or written before a press
 - It reads `hostslot status --json` every 5 seconds and only shows; scheduling comes from the agents' hooks
 - Development: `orca plugin dev load .`, then `orca plugin logs local.hostslot`. For screenshots, a status in `panel-fixture.json` in the data directory replaces the live one while the file exists
@@ -258,7 +258,7 @@ Exit codes: the command's own, or `128 + signal` (killed), `127` (command not fo
 Optional `config.json` in the data directory, reread every second. `0` means computed for the machine:
 
 ```json
-{ "slots": 0, "costMB": 2048, "reserveMB": 0, "memoryFraction": 0.6, "jobCeilingFraction": 0.75, "minSamples": 3 }
+{ "slots": 0, "costMB": 2048, "reserveMB": 0, "memoryFraction": 0.6, "jobCeilingFraction": 0.75, "minSamples": 3, "cpuBusyLimit": 0.9 }
 ```
 
 | Variable | Effect |
@@ -277,6 +277,8 @@ Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 | | Linux | macOS | Windows |
 | --- | --- | --- | --- |
 | Free memory | `/proc/meminfo`, cgroup v2 limits | `sysctl` and page counters | `GlobalMemoryStatusEx` |
+| CPU busy | `/proc/stat` | 1-minute load average per CPU | `GetSystemTimes` |
+| Listening ports | `/proc/net/tcp{,6}` and socket inodes | `lsof` | TCP table with owner PIDs |
 | Job memory | Resident memory over `/proc`, every 250 ms | Resident memory from `ps`, every 250 ms | Job Object committed memory |
 | Stop a tree, clean up | Signals to descendants | Signals to descendants | Job Object |
 | Lower priority | `nice 10` | `nice 10` | Below-normal priority class |

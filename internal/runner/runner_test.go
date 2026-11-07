@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ryusenkei-inc/hostslot/internal/daemon"
 	"github.com/ryusenkei-inc/hostslot/internal/gate"
 	"github.com/ryusenkei-inc/hostslot/internal/jobkey"
 	"github.com/ryusenkei-inc/hostslot/internal/platform"
@@ -287,5 +288,20 @@ func TestRunStopsARunawayAtItsCeiling(t *testing.T) {
 	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
 	if peaks := st.Peaks(jobkey.For(o.Dir, o.Args[0])); len(peaks) != 1 || peaks[0] < 150 {
 		t.Fatalf("the stopped run's peak was not kept: %v", peaks)
+	}
+}
+
+func TestWaitReason(t *testing.T) {
+	pct := 95
+	s := &daemon.Status{CPUBusyPct: &pct}
+	s.Snapshot.Waiting = []gate.Job{{Reason: "cpu"}, {Reason: "queue"}}
+	if got := waitReason(s, 1); got != "CPUs 95% busy" {
+		t.Fatalf("got %q", got)
+	}
+	if got := waitReason(s, 2); got != "behind other jobs" {
+		t.Fatalf("got %q", got)
+	}
+	if got := waitReason(s, 5); got != "waiting for room" {
+		t.Fatalf("got %q", got)
 	}
 }

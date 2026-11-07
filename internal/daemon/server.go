@@ -50,6 +50,8 @@ type Server struct {
 	stops      map[uint64]chan struct{}
 	lastStop   time.Time
 	reserve    uint64
+	cpuBusy    float64
+	cpuKnown   bool
 	cfg        gate.Config
 	recent     []Finished
 	clients    int
@@ -176,6 +178,7 @@ func (s *Server) cycleLocked(full bool) {
 			s.reserve = cfg.ReserveMB
 			s.cfg = cfg
 		}
+		s.readCPULocked()
 		s.stopLargestLocked()
 		if s.Alive != nil {
 			for _, j := range s.sched.Reap(s.Alive) {
@@ -238,6 +241,26 @@ func (s *Server) commandOf(id uint64) string {
 	return fmt.Sprintf("job %d", id)
 }
 
+// cpuSmoothing is the weight of a new CPU reading: with readings a second
+// apart, a burst shorter than a few seconds doesn't hold jobs back.
+const cpuSmoothing = 0.3
+
+func (s *Server) readCPULocked() {
+	m, ok := s.Metrics.(platform.CPUMeter)
+	if !ok {
+		return
+	}
+	busy, ok := m.CPUBusy()
+	if !ok {
+		return
+	}
+	if s.cpuKnown {
+		busy = s.cpuBusy*(1-cpuSmoothing) + busy*cpuSmoothing
+	}
+	s.cpuBusy, s.cpuKnown = busy, true
+	s.sched.SetCPUBusy(busy)
+}
+
 func (s *Server) status() *Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -257,6 +280,14 @@ func (s *Server) status() *Status {
 		ReserveMB: s.cfg.ReserveMB,
 		CeilingMB: gate.Ceiling(s.memory.TotalMB, s.cfg),
 		Recent:    slices.Clone(s.recent),
+		CPUBusyPct: func() *int {
+			if !s.cpuKnown {
+				return nil
+			}
+			pct := int(s.cpuBusy*100 + 0.5)
+			return &pct
+		}(),
+		CPUBusyLimitPct: int(s.cfg.CPUBusyLimit*100 + 0.5),
 	}
 }
 

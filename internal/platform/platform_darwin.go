@@ -18,7 +18,10 @@ import (
 
 // ---- Metrics: sysctl ----
 
-type nativeMetrics struct{}
+type nativeMetrics struct{ cpu *cpuMeter }
+
+// CPUBusy implements CPUMeter.
+func (m nativeMetrics) CPUBusy() (float64, bool) { return m.cpu.busy() }
 
 func (nativeMetrics) Memory() (Memory, error) {
 	total, err := unix.SysctlUint64("hw.memsize")
