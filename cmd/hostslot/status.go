@@ -90,6 +90,9 @@ func printStatus(w io.Writer, s *daemon.Status) {
 	fmt.Fprintf(w, "mode:    %s\n", mode)
 	fmt.Fprintf(w, "slots:   %d/%d used, room for %d more\n", s.Snapshot.Used, s.Snapshot.Slots, s.Room)
 	fmt.Fprintf(w, "memory:  %d MB free of %d MB\n", s.Memory.FreeMB, s.Memory.TotalMB)
+	if s.GPU != nil {
+		fmt.Fprintf(w, "gpu:     %s, %d MB free of %d MB\n", s.GPU.Name, s.GPU.FreeMB, s.GPU.TotalMB)
+	}
 	if s.CPUBusyPct != nil {
 		fmt.Fprintf(w, "cpus:    %d, %d%% busy (agents wait from %d%%)\n", s.CPUs, *s.CPUBusyPct, s.CPUBusyLimitPct)
 	} else {

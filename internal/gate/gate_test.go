@@ -356,3 +356,38 @@ func TestBusyCPUsHoldBackgroundJobs(t *testing.T) {
 		t.Fatalf("after the CPUs calmed down: %+v", got)
 	}
 }
+
+func TestJobsThatNeedGPUMemoryWaitForIt(t *testing.T) {
+	s := New(Config{CostMB: 1000, ReserveMB: 1000, MinSamples: 3, Warmup: time.Minute}, 4, nil)
+	s.SetGPUFree(5000, true)
+	s.Enqueue(Request{Command: "train", Weight: 1, GPUMB: 4000}, t0)
+	if got := s.Admit(t0, 100000); len(got) != 1 {
+		t.Fatal("first job not admitted")
+	}
+	// The first job hasn't allocated yet: its 4000 MB are held during warmup.
+	s.Enqueue(Request{Command: "infer", Weight: 1, GPUMB: 2000}, t0)
+	s.Enqueue(Request{Command: "lint", Weight: 1}, t0)
+	if got := s.Admit(t0.Add(time.Second), 100000); len(got) != 0 {
+		t.Fatalf("admitted %+v; the GPU job heads the queue", got)
+	}
+	if snap := s.SnapshotAt(t0.Add(time.Second), 100000); snap.Waiting[0].Reason != "gpu" {
+		t.Fatalf("reason %q", snap.Waiting[0].Reason)
+	}
+	// After warmup the reading shows what the first job took.
+	s.SetGPUFree(1000, true)
+	if got := s.Admit(t0.Add(2*time.Minute), 100000); len(got) != 0 {
+		t.Fatal("admitted without GPU memory")
+	}
+	s.SetGPUFree(3000, true)
+	if got := s.Admit(t0.Add(2*time.Minute), 100000); len(got) != 2 {
+		t.Fatalf("admitted %d, want both", len(got))
+	}
+	// Without a readable GPU nothing waits for it.
+	u := New(Config{CostMB: 1000, ReserveMB: 1000, MinSamples: 3, Warmup: time.Minute}, 4, nil)
+	u.Enqueue(Request{Command: "a", Weight: 1}, t0)
+	u.Admit(t0, 100000)
+	u.Enqueue(Request{Command: "b", Weight: 1, GPUMB: 4000}, t0)
+	if got := u.Admit(t0, 100000); len(got) != 1 {
+		t.Fatal("waited for an unknown GPU")
+	}
+}

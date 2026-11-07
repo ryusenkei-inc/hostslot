@@ -19,6 +19,7 @@ func cmdRun(args []string) int {
 	timeout := fs.Duration("timeout", 0, "stop the command after it has run this long and exit 124 (0 = none)")
 	keepChildren := fs.Bool("keep-children", false, "leave processes the command started running after it exits")
 	maxMemory := fs.Uint64("max-memory", 0, "stop the command when it uses more MB and exit 77 (default: jobCeilingFraction of total memory)")
+	gpuMB := fs.Uint64("gpu-mb", 0, "GPU memory in MB the command needs; it waits until the GPU has that much free")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -47,6 +48,7 @@ func cmdRun(args []string) int {
 		Timeout:      *timeout,
 		KeepChildren: *keepChildren,
 		MaxMemoryMB:  *maxMemory,
+		GPUMB:        *gpuMB,
 		Weight:       *weight,
 		Priority:     priority,
 		Dir:          dir,

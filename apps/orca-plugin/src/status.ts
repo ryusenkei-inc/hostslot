@@ -56,6 +56,8 @@ export type Status = {
   cpuBusyPct?: number;
   /** Where background jobs stop being admitted, in percent. */
   cpuBusyLimitPct?: number;
+  /** The first NVIDIA GPU (Hostslot 0.11+). */
+  gpu?: { name: string; totalMB: number; freeMB: number };
   snapshot: { slots: number; used: number; heldMB?: number; running: Job[]; waiting: Job[] };
   /** How many more weight-1 jobs would start now; missing before hostslot 0.5. */
   room?: number;

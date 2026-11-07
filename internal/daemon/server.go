@@ -52,6 +52,8 @@ type Server struct {
 	reserve    uint64
 	cpuBusy    float64
 	cpuKnown   bool
+	gpu        *platform.GPU
+	gpuRead    time.Time
 	cfg        gate.Config
 	recent     []Finished
 	clients    int
@@ -179,6 +181,7 @@ func (s *Server) cycleLocked(full bool) {
 			s.cfg = cfg
 		}
 		s.readCPULocked()
+		s.readGPULocked()
 		s.stopLargestLocked()
 		if s.Alive != nil {
 			for _, j := range s.sched.Reap(s.Alive) {
@@ -261,6 +264,27 @@ func (s *Server) readCPULocked() {
 	s.sched.SetCPUBusy(busy)
 }
 
+// gpuEvery spaces out nvidia-smi, which takes a tenth of a second or more.
+const gpuEvery = 5 * time.Second
+
+// GPU is read only while a GPU is found; ReadGPU is a package variable so
+// tests can stand in for nvidia-smi.
+var readGPU = platform.ReadGPU
+
+func (s *Server) readGPULocked() {
+	if time.Since(s.gpuRead) < gpuEvery {
+		return
+	}
+	s.gpuRead = time.Now()
+	if g, ok := readGPU(); ok {
+		s.gpu = &g
+		s.sched.SetGPUFree(g.FreeMB, true)
+		return
+	}
+	s.gpu = nil
+	s.sched.SetGPUFree(0, false)
+}
+
 func (s *Server) status() *Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -288,6 +312,7 @@ func (s *Server) status() *Status {
 			return &pct
 		}(),
 		CPUBusyLimitPct: int(s.cfg.CPUBusyLimit*100 + 0.5),
+		GPU:             s.gpu,
 	}
 }
 

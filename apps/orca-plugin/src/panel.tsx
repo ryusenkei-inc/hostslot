@@ -38,7 +38,7 @@ export function setup(ctx: PanelContext): void {
 
 function Machine({ v }: { v: View }) {
   if (!v.machine) return null;
-  const { memory, slots, cpu } = v.machine;
+  const { memory, slots, cpu, gpu } = v.machine;
   return (
     <Stack gap="sm">
       <Progress label={memory.label} value={memory.usedPct} />
@@ -49,6 +49,7 @@ function Machine({ v }: { v: View }) {
       ) : null}
       <Progress label={slots.label} value={slots.usedPct} />
       {cpu ? <Progress label={cpu.label} value={cpu.usedPct} /> : null}
+      {gpu ? <Progress label={gpu.label} value={gpu.usedPct} /> : null}
     </Stack>
   );
 }

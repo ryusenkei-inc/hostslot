@@ -61,6 +61,9 @@ type Options struct {
 	// Started, when set, is called with the command's process id once it
 	// runs.
 	Started func(pid int)
+	// GPUMB is the GPU memory the command needs; it waits until the GPU has
+	// it free.
+	GPUMB uint64
 }
 
 // Exit codes of hostslot itself.
@@ -118,6 +121,7 @@ func Run(p *platform.Platform, o Options) (int, error) {
 		PID:      os.Getpid(),
 		Source:   o.Source,
 		Context:  jobContext(os.Getenv),
+		GPUMB:    o.GPUMB,
 	}
 	var deadline time.Time
 	if o.MaxWait > 0 {

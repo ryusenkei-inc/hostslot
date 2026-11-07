@@ -170,6 +170,8 @@ func waitReason(s *daemon.Status, position int) string {
 		return "behind other jobs"
 	case "memory":
 		return "not enough free memory"
+	case "gpu":
+		return "not enough free GPU memory"
 	}
 	return "waiting for room"
 }

@@ -80,7 +80,7 @@ Hostslot is made for Orca first, and the two do different jobs: Orca runs, shows
 | | |
 | --- | --- |
 | **Slots** | `floor((total memory x 0.6 - reserve) / 2 GB)`, at most half the CPU count, since a heavy command keeps several cores busy: 4 on a 16 GB machine with 8 or more CPUs, 8 on 64 GB with 16 |
-| **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents (6% of total memory, between 1 GB and 4 GB, unless configured). Running jobs that are still growing hold back the rest of their estimate. While the CPUs are busier than `cpuBusyLimit` (90%), background jobs wait too. When nothing runs, the next job always starts |
+| **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents (6% of total memory, between 1 GB and 4 GB, unless configured). Running jobs that are still growing hold back the rest of their estimate. While the CPUs are busier than `cpuBusyLimit` (90%), background jobs wait too. A job run with `--gpu-mb N` waits until the GPU has N MB free. When nothing runs, the next job always starts |
 | **Order** | Interactive jobs (a person at a terminal) before background jobs (agents, scripts), first come first served; the head of the queue blocks later jobs, so a heavy job is never starved |
 | **Learning** | Each command's peak memory and duration, per repository (see [What it learns](#what-it-learns)) |
 | **CPU share** | Background jobs run at a lower OS priority. Each job gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency`, `pnpm_config_workspace_concurrency`, `CARGO_BUILD_JOBS`, `GOFLAGS=-p=N`, `MAKEFLAGS=-jN` and `HOSTSLOT_WORKERS` (not under `CI`, never overriding a set value) |
@@ -159,7 +159,7 @@ Each finished job adds a sample to `samples.json` in the data directory. Nothing
 This repository is also an Orca plugin (`orca-plugin.json` at the root, code in `apps/orca-plugin`).
 
 - **Status bar:** `Hostslot 2/4 · 1 waiting · 3.1 GB free`; yellow while jobs wait or the setup has a problem, red when memory is nearly gone
-- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory, slots and CPU; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; dev servers with their URLs, and a warning when one listens elsewhere; jobs a guard stopped; recent outcomes; jobs by repository; setup problems with one button to fix them
+- **Panel** (press the item to open the right sidebar, then pick the Hostslot tab once): memory, slots, CPU and GPU; running jobs with repository, worktree, agent and time left; waiting jobs with why and when they start; dev servers with their URLs, and a warning when one listens elsewhere; jobs a guard stopped; recent outcomes; jobs by repository; setup problems with one button to fix them
 - **Install from the panel:** when Hostslot is missing or older than the plugin, the panel offers to install the plugin's version. On the press, it downloads the executable from the GitHub release, checks it against the release's `checksums.txt`, puts it in `bin` in Hostslot's data directory and runs `hostslot setup`. Nothing is downloaded or written before a press
 - It reads `hostslot status --json` every 5 seconds and only shows; scheduling comes from the agents' hooks
 - Development: `orca plugin dev load .`, then `orca plugin logs local.hostslot`. For screenshots, a status in `panel-fixture.json` in the data directory replaces the live one while the file exists
@@ -249,6 +249,7 @@ Where Hostslot is installed but not wanted (CI), set `HOSTSLOT_DISABLE=1`.
 | `--max-wait 5m` | Give up waiting after 5 minutes |
 | `--timeout 2m` | Stop the job after it has run 2 minutes |
 | `--max-memory MB` | Memory ceiling for this run |
+| `--gpu-mb MB` | GPU memory the command needs; it waits until the GPU has that much free |
 | `--keep-children` | Leave processes the command started running |
 
 Exit codes: the command's own, or `128 + signal` (killed), `127` (command not found), `75` (no slot in time), `124` (timeout), `77` (over its memory ceiling, or stopped because memory ran out). Ctrl+C reaches the command; a second one kills its process tree.
@@ -278,6 +279,7 @@ Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 | --- | --- | --- | --- |
 | Free memory | `/proc/meminfo`, cgroup v2 limits | `sysctl` and page counters | `GlobalMemoryStatusEx` |
 | CPU busy | `/proc/stat` | 1-minute load average per CPU | `GetSystemTimes` |
+| GPU memory | `nvidia-smi` (first NVIDIA GPU) | `nvidia-smi` (first NVIDIA GPU) | `nvidia-smi` (first NVIDIA GPU) |
 | Listening ports | `/proc/net/tcp{,6}` and socket inodes | `lsof` | TCP table with owner PIDs |
 | Job memory | Resident memory over `/proc`, every 250 ms | Resident memory from `ps`, every 250 ms | Job Object committed memory |
 | Stop a tree, clean up | Signals to descendants | Signals to descendants | Job Object |
@@ -289,6 +291,7 @@ Data directory: `~/.local/share/hostslot` (Linux, or `$XDG_DATA_HOME`), `~/Libra
 - Hostslot sees only commands that go through it (hooks, scripts, `hostslot run`); it can stop a program but not make it use less memory
 - Memory is read every 0.25–2 s, so a very fast spike can pass a check. OS-enforced limits aren't used: a failed allocation ends a program with its own error, which an agent can't tell from a test failure
 - One user on one machine: not containers, VMs or other users
+- GPU: only the first NVIDIA GPU, and only for jobs that state their need with `--gpu-mb`; GPU use is not learned yet, and the lock fallback without a daemon ignores it
 - On Windows, a child started in the first instant before its parent joins the Job Object can escape tracking. Unix systems other than Linux and macOS track only the root process
 
 ## Development

@@ -115,6 +115,8 @@ export type View = {
     slots: { usedPct: number; label: string };
     /** Missing when the OS can't tell. */
     cpu?: { usedPct: number; label: string; tone: Tone };
+    /** Missing without an NVIDIA GPU. */
+    gpu?: { usedPct: number; label: string };
   };
   running: JobRow[];
   waiting: WaitRow[];
@@ -212,6 +214,9 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
               tone: s.cpuBusyLimitPct !== undefined && s.cpuBusyPct >= s.cpuBusyLimitPct ? 'warning' : 'neutral',
             },
           }),
+      ...(s.gpu
+        ? { gpu: { usedPct: pct(s.gpu.totalMB - s.gpu.freeMB, s.gpu.totalMB), label: `GPU: ${size(s.gpu.freeMB)} free of ${size(s.gpu.totalMB)}` } }
+        : {}),
     },
     running: running.map((j) => {
       const left = remaining(j, now);
@@ -333,6 +338,7 @@ function why(j: Job, freeMB: number, heldMB: number, reserveMB: number, i: numbe
   if (j.reason === 'queue' || (j.reason === undefined && i > 0)) return `behind #${i}`;
   if (j.reason === 'slots') return 'all slots busy';
   if (j.reason === 'cpu') return 'CPUs busy';
+  if (j.reason === 'gpu') return 'not enough free GPU memory';
   const available = Math.max(0, freeMB - heldMB - reserveMB);
   return `needs ~${size(j.estimateMB)}, ${size(available)} available`;
 }

@@ -50,6 +50,8 @@ type Request struct {
 	// Context carries environment variables that tie the job to a place in
 	// another tool, such as an agent IDE's pane, for integrations to show.
 	Context map[string]string `json:"context,omitempty"`
+	// GPUMB is the GPU memory the job says it needs (`--gpu-mb`); 0 for none.
+	GPUMB uint64 `json:"gpuMB,omitempty"`
 }
 
 // Key identifies a job for learning.
@@ -115,10 +117,13 @@ type Scheduler struct {
 	slots int
 	// cpuBusy is the recent busy share of all CPUs (see SetCPUBusy).
 	cpuBusy float64
-	est     Estimator
-	seq     uint64
-	waiting []*Job
-	running map[uint64]*Job
+	// gpuFreeMB is the GPU's free memory, when gpuKnown (see SetGPUFree).
+	gpuFreeMB uint64
+	gpuKnown  bool
+	est       Estimator
+	seq       uint64
+	waiting   []*Job
+	running   map[uint64]*Job
 }
 
 // New returns a scheduler with the given slot count.
@@ -133,6 +138,28 @@ func (s *Scheduler) SetCPUBusy(busy float64) { s.cpuBusy = busy }
 
 func (s *Scheduler) cpuBlocks(j *Job) bool {
 	return j.Priority == Background && s.cfg.CPUBusyLimit < 1 && s.cpuBusy >= s.cfg.CPUBusyLimit
+}
+
+// gpuReserveMB stays free on the GPU for the display and other programs.
+const gpuReserveMB = 256
+
+// SetGPUFree records the GPU's free memory; known is false without one.
+func (s *Scheduler) SetGPUFree(freeMB uint64, known bool) { s.gpuFreeMB, s.gpuKnown = freeMB, known }
+
+// gpuBlocks reports whether a job that needs GPU memory must wait: running
+// jobs still in their warmup may not have allocated theirs yet, so they
+// hold what they asked for. Without a readable GPU nothing waits for it.
+func (s *Scheduler) gpuBlocks(j *Job, now time.Time) bool {
+	if j.GPUMB == 0 || !s.gpuKnown {
+		return false
+	}
+	var held uint64
+	for _, r := range s.running {
+		if now.Sub(r.Started) < s.cfg.Warmup {
+			held += r.GPUMB
+		}
+	}
+	return s.gpuFreeMB < held+j.GPUMB+gpuReserveMB
 }
 
 // SetConfig applies a reloaded configuration with its slot count.
@@ -215,7 +242,7 @@ func (s *Scheduler) Admit(now time.Time, freeMB uint64) []*Job {
 			if freeMB < reserved+j.EstimateMB+s.cfg.ReserveMB {
 				break
 			}
-			if s.cpuBlocks(j) {
+			if s.cpuBlocks(j) || s.gpuBlocks(j, now) {
 				break
 			}
 		}
@@ -336,11 +363,22 @@ func (s *Scheduler) SnapshotAt(now time.Time, freeMB uint64) Snapshot {
 			j.Reason = "slots"
 		case freeMB >= snap.HeldMB+j.EstimateMB+s.cfg.ReserveMB && s.cpuBlocks(j):
 			j.Reason = "cpu"
+		case freeMB >= snap.HeldMB+j.EstimateMB+s.cfg.ReserveMB && s.gpuBlocks(s.waitingJob(j.ID), now):
+			j.Reason = "gpu"
 		default:
 			j.Reason = "memory"
 		}
 	}
 	return snap
+}
+
+func (s *Scheduler) waitingJob(id uint64) *Job {
+	for _, j := range s.waiting {
+		if j.ID == id {
+			return j
+		}
+	}
+	return &Job{}
 }
 
 func median(values []int64) int64 {

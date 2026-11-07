@@ -138,6 +138,13 @@ it('shows how busy the CPUs are, and when that holds a job back', () => {
   expect(view(status(), '', [], 0, now).machine?.cpu).toBeUndefined();
 });
 
+it('shows the GPU when there is one, and when a job waits for its memory', () => {
+  const v = view(status({ gpu: { name: 'GTX', totalMB: 6144, freeMB: 1024 } }, { used: 1, running: [job], waiting: [{ ...job, id: 8, reason: 'gpu' }] }), '', [], 0, now);
+  expect(v.machine?.gpu).toEqual({ usedPct: 83, label: 'GPU: 1.0 GB free of 6.0 GB' });
+  expect(v.waiting[0]?.why).toBe('not enough free GPU memory');
+  expect(view(status(), '', [], 0, now).machine?.gpu).toBeUndefined();
+});
+
 it('groups jobs by repository', () => {
   const blog = { ...job, id: 9, key: 'git:/dev/blog/.git\napps/web\npnpm build', dir: '/dev/blog/apps/web', currentMB: 1024 };
   const v = view(status({}, { used: 2, running: [job, blog], waiting: [{ ...job, id: 10, reported: false }] }), '', [], 0, now);
