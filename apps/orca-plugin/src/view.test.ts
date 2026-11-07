@@ -126,7 +126,29 @@ it('lists dev servers, running first, and says when one listens elsewhere', () =
       running: true,
       note: 'listens on 5174, not 21643: make it read PORT',
     },
-    { key: 'git:/dev/blog/.git\n/dev/blog\nblog', name: 'blog', where: 'blog', url: 'http://localhost:3000', running: false },
+  ]);
+  expect(v.assigned).toEqual([{ repo: 'blog', rows: [{ key: 'git:/dev/blog/.git\n/dev/blog\nblog', worktree: 'main checkout', name: 'blog', port: '3000' }] }]);
+});
+
+it('groups ports not in use by repository, main checkout first', () => {
+  const entry = (repo: string, top: string, name: string, port: number) => ({
+    key: `git:/dev/${repo}/.git\n${top}\n${name}`,
+    port,
+    name,
+    worktree: top,
+    running: false,
+  });
+  const ports = [
+    entry('sim', '/w/agent-b', 'web', 21101),
+    entry('api', '/dev/api', 'api', 3001),
+    entry('sim', '/dev/sim', 'web', 20545),
+    entry('sim', '/w/agent-a', 'web', 21089),
+    entry('sim', '/dev/sim', 'justrig', 20326),
+  ];
+  const v = view(status({ ports }), '', [], 0, now);
+  expect(v.assigned.map((g) => [g.repo, g.rows.map((r) => `${r.worktree}/${r.name}:${r.port}`)])).toEqual([
+    ['api', ['main checkout/api:3001']],
+    ['sim', ['main checkout/justrig:20326', 'main checkout/web:20545', 'agent-a/web:21089', 'agent-b/web:21101']],
   ]);
   expect(view(status(), '', [], 0, now).ports).toEqual([]);
 });
