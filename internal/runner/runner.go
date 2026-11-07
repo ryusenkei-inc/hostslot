@@ -81,7 +81,14 @@ const JobVar = "HOSTSLOT_JOB"
 // or the variable is already set. pnpm 10 reads only the npm_config_ prefix
 // and pnpm 11 only pnpm_config_, so both are set. npm warns about the
 // unknown npm_config_ key, but it is harmless.
-var InnerParallelismVars = []string{"VITEST_MAX_WORKERS", "npm_config_workspace_concurrency", "pnpm_config_workspace_concurrency"}
+var InnerParallelismVars = []string{"VITEST_MAX_WORKERS", "npm_config_workspace_concurrency", "pnpm_config_workspace_concurrency", "CARGO_BUILD_JOBS"}
+
+// innerParallelismFlags carry the worker share as a flag. These variables
+// hold other flags too, so they are set only when absent.
+var innerParallelismFlags = []struct{ name, format string }{
+	{"GOFLAGS", "-p=%d"},
+	{"MAKEFLAGS", "-j%d"},
+}
 
 // Run executes the command and returns its exit code. An error means the
 // command could not be run at all.
@@ -153,6 +160,11 @@ func withWorkers(env []string, workers int) []string {
 	for _, k := range InnerParallelismVars {
 		if !has[strings.ToUpper(k)] {
 			env = append(env, k+"="+w)
+		}
+	}
+	for _, f := range innerParallelismFlags {
+		if !has[f.name] {
+			env = append(env, f.name+"="+fmt.Sprintf(f.format, workers))
 		}
 	}
 	return env

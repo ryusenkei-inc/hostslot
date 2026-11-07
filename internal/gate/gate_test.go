@@ -25,13 +25,32 @@ func TestSlots(t *testing.T) {
 		want  int
 	}{
 		{"16GB defaults", 16384, 16, Config{}, 4},
-		{"capped by cpus", 65536, 2, Config{}, 2},
+		// 64 GB has memory for 17 (with its 3.8 GB reserve); a heavy command
+		// keeps several cores busy, so half the CPUs bound it.
+		{"64GB, 16 CPUs", 65536, 16, Config{}, 8},
+		{"capped by half the cpus", 65536, 4, Config{}, 2},
 		{"at least one", 2048, 8, Config{}, 1},
+		{"one CPU", 16384, 1, Config{}, 1},
 		{"override", 16384, 16, Config{Slots: 7}, 7},
 	}
 	for _, tc := range cases {
 		if got := Slots(tc.total, tc.cpus, tc.c); got != tc.want {
 			t.Errorf("%s: Slots = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestReserveFollowsTheMachine(t *testing.T) {
+	for _, c := range []struct {
+		total, set, want uint64
+	}{
+		{8192, 0, 1024},     // 6% is under 1 GB
+		{65536, 0, 3932},    // 6%
+		{262144, 0, 4096},   // capped at 4 GB
+		{65536, 2000, 2000}, // configured
+	} {
+		if got := (Config{ReserveMB: c.set}).ForMachine(c.total).ReserveMB; got != c.want {
+			t.Errorf("total %d, set %d: reserve %d, want %d", c.total, c.set, got, c.want)
 		}
 	}
 }

@@ -79,11 +79,11 @@ Hostslot is made for Orca first, and the two do different jobs: Orca runs, shows
 
 | | |
 | --- | --- |
-| **Slots** | `floor((total memory x 0.6 - reserve) / 2 GB)`, at most the CPU count: 4 on a 16 GB machine |
-| **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents. Running jobs that are still growing hold back the rest of their estimate. When nothing runs, the next job always starts |
+| **Slots** | `floor((total memory x 0.6 - reserve) / 2 GB)`, at most half the CPU count, since a heavy command keeps several cores busy: 4 on a 16 GB machine with 8 or more CPUs, 8 on 64 GB with 16 |
+| **Admission** | A job needs free slots for its weight and free memory for its estimate, on top of `reserveMB` kept for the editor, browsers and agents (6% of total memory, between 1 GB and 4 GB, unless configured). Running jobs that are still growing hold back the rest of their estimate. When nothing runs, the next job always starts |
 | **Order** | Interactive jobs (a person at a terminal) before background jobs (agents, scripts), first come first served; the head of the queue blocks later jobs, so a heavy job is never starved |
 | **Learning** | Each command's peak memory and duration, per repository (see [What it learns](#what-it-learns)) |
-| **CPU share** | Background jobs run at a lower OS priority. Each job gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency`, `pnpm_config_workspace_concurrency` and `HOSTSLOT_WORKERS` (not under `CI`, never overriding a set value) |
+| **CPU share** | Background jobs run at a lower OS priority. Each job gets its share of CPUs in `VITEST_MAX_WORKERS`, `npm_config_workspace_concurrency`, `pnpm_config_workspace_concurrency`, `CARGO_BUILD_JOBS`, `GOFLAGS=-p=N`, `MAKEFLAGS=-jN` and `HOSTSLOT_WORKERS` (not under `CI`, never overriding a set value) |
 | **Nesting** | A `hostslot run` inside a gated job runs directly (`HOSTSLOT_JOB` is set), so hooks, git hooks and scripts can wrap each other without deadlock |
 | **Daemon** | Started by the first `hostslot run`, over a Unix socket or named pipe; exits after 10 idle minutes. A newer version retires an older daemon, which finishes its jobs first. Without a daemon, one machine-wide lock per slot (no queue order) |
 | **Crash safety** | A job holds its slot through an open connection or OS lock; if it dies, the slot comes back |
@@ -255,10 +255,10 @@ Exit codes: the command's own, or `128 + signal` (killed), `127` (command not fo
 
 ### Configuration
 
-Optional `config.json` in the data directory, reread every second:
+Optional `config.json` in the data directory, reread every second. `0` means computed for the machine:
 
 ```json
-{ "slots": 0, "costMB": 2048, "reserveMB": 1024, "memoryFraction": 0.6, "jobCeilingFraction": 0.75, "minSamples": 3 }
+{ "slots": 0, "costMB": 2048, "reserveMB": 0, "memoryFraction": 0.6, "jobCeilingFraction": 0.75, "minSamples": 3 }
 ```
 
 | Variable | Effect |

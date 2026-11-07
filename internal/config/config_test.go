@@ -15,7 +15,7 @@ func TestLoadFileAndEnv(t *testing.T) {
 	t.Setenv("HOSTSLOT_COST_MB", "")
 	t.Setenv("HOSTSLOT_RESERVE_MB", "")
 	c, err := Load(dir)
-	if err != nil || c.Slots != 3 || c.CostMB != 1500 || c.ReserveMB != 1024 {
+	if err != nil || c.Slots != 3 || c.CostMB != 1500 || c.ReserveMB != 0 {
 		t.Fatalf("file: %+v %v", c, err)
 	}
 	t.Setenv("HOSTSLOT_SLOTS", "5")
