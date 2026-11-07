@@ -46,8 +46,8 @@ func acquire(p *platform.Platform, cfg gate.Config, req gate.Request, deadline t
 				}
 				last = time.Now()
 				s := m.Status
-				fmt.Fprintf(stderr, "hostslot: waiting (position %d of %d, slots %d/%d used, %d MB free, needs ~%d MB)\n",
-					m.Position, len(s.Snapshot.Waiting), s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB, m.Job.EstimateMB)
+				fmt.Fprintf(stderr, "hostslot: waiting (position %d of %d, %s; slots %d/%d used, %d MB free, needs ~%d MB)\n",
+					m.Position, len(s.Snapshot.Waiting), waitReason(s, m.Position), s.Snapshot.Used, s.Snapshot.Slots, s.Memory.FreeMB, m.Job.EstimateMB)
 			})
 			if err == nil {
 				return &lease{job: l.Job, slots: l.Status.Snapshot.Slots, cpus: l.Status.CPUs, mode: "daemon", release: l.Release, report: l.Report, stopped: l.Stopped()}, nil
@@ -149,6 +149,29 @@ func lockLease(p *platform.Platform, st *store.Store, job gate.Job, slots, cpus 
 		}
 		releaseAll(held)
 	}}
+}
+
+// waitReason says why the job at position (1-based) waits, from the
+// daemon's status.
+func waitReason(s *daemon.Status, position int) string {
+	var reason string
+	if position >= 1 && position <= len(s.Snapshot.Waiting) {
+		reason = s.Snapshot.Waiting[position-1].Reason
+	}
+	switch reason {
+	case "slots":
+		return "all slots busy"
+	case "cpu":
+		if s.CPUBusyPct != nil {
+			return fmt.Sprintf("CPUs %d%% busy", *s.CPUBusyPct)
+		}
+		return "CPUs busy"
+	case "queue":
+		return "behind other jobs"
+	case "memory":
+		return "not enough free memory"
+	}
+	return "waiting for room"
 }
 
 // recordWithLock serializes writers of samples.json across processes.

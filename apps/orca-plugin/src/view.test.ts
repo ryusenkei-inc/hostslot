@@ -131,6 +131,13 @@ it('lists dev servers, running first, and says when one listens elsewhere', () =
   expect(view(status(), '', [], 0, now).ports).toEqual([]);
 });
 
+it('shows how busy the CPUs are, and when that holds a job back', () => {
+  const v = view(status({ cpuBusyPct: 95, cpuBusyLimitPct: 90 }, { used: 1, running: [job], waiting: [{ ...job, id: 8, reason: 'cpu' }] }), '', [], 0, now);
+  expect(v.machine?.cpu).toEqual({ usedPct: 95, label: 'CPU: 95% busy', tone: 'warning' });
+  expect(v.waiting[0]?.why).toBe('CPUs busy');
+  expect(view(status(), '', [], 0, now).machine?.cpu).toBeUndefined();
+});
+
 it('groups jobs by repository', () => {
   const blog = { ...job, id: 9, key: 'git:/dev/blog/.git\napps/web\npnpm build', dir: '/dev/blog/apps/web', currentMB: 1024 };
   const v = view(status({}, { used: 2, running: [job, blog], waiting: [{ ...job, id: 10, reported: false }] }), '', [], 0, now);

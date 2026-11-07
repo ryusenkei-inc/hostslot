@@ -111,8 +111,10 @@ type Snapshot struct {
 // Scheduler admits jobs into a fixed number of slots. It is not safe for
 // concurrent use; the daemon serializes access.
 type Scheduler struct {
-	cfg     Config
-	slots   int
+	cfg   Config
+	slots int
+	// cpuBusy is the recent busy share of all CPUs (see SetCPUBusy).
+	cpuBusy float64
 	est     Estimator
 	seq     uint64
 	waiting []*Job
@@ -122,6 +124,15 @@ type Scheduler struct {
 // New returns a scheduler with the given slot count.
 func New(cfg Config, slots int, est Estimator) *Scheduler {
 	return &Scheduler{cfg: cfg.Normalize(), slots: max(slots, 1), est: est, running: map[uint64]*Job{}}
+}
+
+// SetCPUBusy records how busy the CPUs are, 0 to 1. While at or above
+// CPUBusyLimit, background jobs wait: memory may be free, but another heavy
+// command would only slow every running one down.
+func (s *Scheduler) SetCPUBusy(busy float64) { s.cpuBusy = busy }
+
+func (s *Scheduler) cpuBlocks(j *Job) bool {
+	return j.Priority == Background && s.cfg.CPUBusyLimit < 1 && s.cpuBusy >= s.cfg.CPUBusyLimit
 }
 
 // SetConfig applies a reloaded configuration with its slot count.
@@ -204,6 +215,9 @@ func (s *Scheduler) Admit(now time.Time, freeMB uint64) []*Job {
 			if freeMB < reserved+j.EstimateMB+s.cfg.ReserveMB {
 				break
 			}
+			if s.cpuBlocks(j) {
+				break
+			}
 		}
 		s.waiting = s.waiting[1:]
 		j.Started = now
@@ -226,6 +240,9 @@ func (s *Scheduler) Room(now time.Time, freeMB uint64) int {
 	slots := s.slots - s.used()
 	if len(s.running) == 0 {
 		return max(slots, 0)
+	}
+	if s.cpuBlocks(&Job{Request: Request{Priority: Background}}) {
+		return 0
 	}
 	var reserved uint64
 	for _, j := range s.running {
@@ -317,6 +334,8 @@ func (s *Scheduler) SnapshotAt(now time.Time, freeMB uint64) Snapshot {
 			j.Reason = "queue"
 		case snap.Used+j.Slots > snap.Slots:
 			j.Reason = "slots"
+		case freeMB >= snap.HeldMB+j.EstimateMB+s.cfg.ReserveMB && s.cpuBlocks(j):
+			j.Reason = "cpu"
 		default:
 			j.Reason = "memory"
 		}

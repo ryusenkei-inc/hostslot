@@ -10,7 +10,10 @@ import (
 
 // Other Unix systems build, but report no memory and track only the root.
 
-type nativeMetrics struct{}
+type nativeMetrics struct{ cpu *cpuMeter }
+
+// CPUBusy implements CPUMeter.
+func (m nativeMetrics) CPUBusy() (float64, bool) { return m.cpu.busy() }
 
 func (nativeMetrics) Memory() (Memory, error) {
 	return Memory{}, errors.New("memory metrics are not supported on " + runtime.GOOS)

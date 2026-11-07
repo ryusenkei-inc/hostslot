@@ -327,3 +327,32 @@ func TestSnapshotAtExplainsHeldMemoryAndWaits(t *testing.T) {
 		t.Fatalf("memory reason: %q", got)
 	}
 }
+
+func TestBusyCPUsHoldBackgroundJobs(t *testing.T) {
+	s := New(Config{CostMB: 1000, ReserveMB: 1000, MinSamples: 3, Warmup: time.Second, CPUBusyLimit: 0.9}, 4, nil)
+	s.SetCPUBusy(0.95)
+	// Nothing runs: the first job starts anyway.
+	s.Enqueue(Request{Command: "a", Weight: 1, Priority: Background}, t0)
+	if got := s.Admit(t0, 100000); len(got) != 1 {
+		t.Fatalf("first: %d", len(got))
+	}
+	b := s.Enqueue(Request{Command: "b", Weight: 1, Priority: Background}, t0)
+	if got := s.Admit(t0, 100000); len(got) != 0 {
+		t.Fatal("a background job started while the CPUs were busy")
+	}
+	if snap := s.SnapshotAt(t0, 100000); snap.Waiting[0].Reason != "cpu" {
+		t.Fatalf("reason %q", snap.Waiting[0].Reason)
+	}
+	if room := s.Room(t0, 100000); room != 0 {
+		t.Fatalf("room %d", room)
+	}
+	// A person's job goes ahead of the queue and starts.
+	s.Enqueue(Request{Command: "i", Weight: 1, Priority: Interactive}, t0)
+	if got := s.Admit(t0, 100000); len(got) != 1 || got[0].Command != "i" {
+		t.Fatalf("interactive: %+v", got)
+	}
+	s.SetCPUBusy(0.5)
+	if got := s.Admit(t0, 100000); len(got) != 1 || got[0].ID != b.ID {
+		t.Fatalf("after the CPUs calmed down: %+v", got)
+	}
+}

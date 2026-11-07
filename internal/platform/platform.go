@@ -25,6 +25,13 @@ type Metrics interface {
 	CPUs() int
 }
 
+// CPUMeter is implemented by Metrics that can tell how busy the CPUs are.
+type CPUMeter interface {
+	// CPUBusy returns the busy fraction of all CPUs since the previous call
+	// (0 to 1), or ok false when it can't tell yet.
+	CPUBusy() (busy float64, ok bool)
+}
+
 // Process is a started command whose whole process tree is tracked.
 type Process interface {
 	Pid() int
@@ -96,7 +103,7 @@ type Platform struct {
 func Native(paths Paths) *Platform {
 	return &Platform{
 		Paths:   paths,
-		Metrics: nativeMetrics{},
+		Metrics: nativeMetrics{cpu: &cpuMeter{}},
 		Tracker: nativeTracker{},
 		IPC:     newIPC(paths),
 		Locks:   newLocker(paths),

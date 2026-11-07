@@ -90,7 +90,11 @@ func printStatus(w io.Writer, s *daemon.Status) {
 	fmt.Fprintf(w, "mode:    %s\n", mode)
 	fmt.Fprintf(w, "slots:   %d/%d used, room for %d more\n", s.Snapshot.Used, s.Snapshot.Slots, s.Room)
 	fmt.Fprintf(w, "memory:  %d MB free of %d MB\n", s.Memory.FreeMB, s.Memory.TotalMB)
-	fmt.Fprintf(w, "cpus:    %d\n", s.CPUs)
+	if s.CPUBusyPct != nil {
+		fmt.Fprintf(w, "cpus:    %d, %d%% busy (agents wait from %d%%)\n", s.CPUs, *s.CPUBusyPct, s.CPUBusyLimitPct)
+	} else {
+		fmt.Fprintf(w, "cpus:    %d\n", s.CPUs)
+	}
 	fmt.Fprintf(w, "tracker: %s\n", s.Tracker.Method)
 	section := func(title string, jobs []gate.Job, since func(gate.Job) time.Time) {
 		fmt.Fprintf(w, "\n%s (%d)\n", title, len(jobs))
