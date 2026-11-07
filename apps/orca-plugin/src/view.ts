@@ -150,7 +150,8 @@ const outcomes: Record<string, [label: string, tone: Tone, detail: string]> = {
 };
 
 /** The view of a status and the setup's problems, or of why hostslot could not be read. */
-export function view(s: Status | undefined, reason = '', problems: Problem[] = [], checks = 0, now = Date.now()): View {
+/** `dismissedAt`: stops that ended at or before it (ms since the epoch) leave the alert. */
+export function view(s: Status | undefined, reason = '', problems: Problem[] = [], checks = 0, now = Date.now(), dismissedAt = 0): View {
   if (!s) {
     return {
       headline: "Hostslot isn't installed",
@@ -252,7 +253,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
     }),
     ports: portRows(s.ports ?? []).filter((p) => p.running),
     assigned: assignedGroups(portRows(s.ports ?? []).filter((p) => !p.running)),
-    stops: guardStops(s, now),
+    stops: guardStops(s, now, dismissedAt),
     recent: (s.recent ?? []).map((f, i) => {
       const [label, oTone, detail] = outcomes[f.outcome] ?? [f.outcome, 'neutral', f.outcome];
       return {
@@ -339,8 +340,11 @@ const guards: { outcome: string; title: string; explanation: (s: Status) => stri
 // Older stops stay rows of Recent but no longer alarm.
 const STOPS_SHOWN_MS = 30 * 60_000;
 
-function guardStops(s: Status, now: number): GuardStops[] {
-  const recent = (s.recent ?? []).filter((f) => now - time(f.ended, now) < STOPS_SHOWN_MS);
+function guardStops(s: Status, now: number, dismissedAt: number): GuardStops[] {
+  const recent = (s.recent ?? []).filter((f) => {
+    const ended = time(f.ended, now);
+    return ended > dismissedAt && now - ended < STOPS_SHOWN_MS;
+  });
   return guards.flatMap((g) => {
     const stopped = recent.filter((f) => f.outcome === g.outcome);
     const latest = stopped[0];
