@@ -76,6 +76,7 @@ func acquireLocks(p *platform.Platform, cfg gate.Config, req gate.Request, deadl
 		return nil, err
 	}
 	cpus := p.Metrics.CPUs()
+	cfg = cfg.ForMachine(mem.TotalMB)
 	slots := gate.Slots(mem.TotalMB, cpus, cfg)
 	st := store.Open(filepath.Join(p.Paths.Data, store.FileName))
 	prior, _ := st.Prior(req.Key())

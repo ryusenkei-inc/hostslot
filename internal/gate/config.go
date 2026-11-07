@@ -35,7 +35,6 @@ func DefaultConfig() Config {
 	return Config{
 		MemoryFraction:     0.6,
 		JobCeilingFraction: 0.75,
-		ReserveMB:          1024,
 		CostMB:             2048,
 		MinSamples:         3,
 		Warmup:             15 * time.Second,
@@ -51,9 +50,6 @@ func (c Config) Normalize() Config {
 	if c.JobCeilingFraction <= 0 {
 		c.JobCeilingFraction = d.JobCeilingFraction
 	}
-	if c.ReserveMB == 0 {
-		c.ReserveMB = d.ReserveMB
-	}
 	if c.CostMB == 0 {
 		c.CostMB = d.CostMB
 	}
@@ -66,18 +62,38 @@ func (c Config) Normalize() Config {
 	return c
 }
 
-// Slots computes the number of weight-1 jobs that may run at once:
-// floor((total x fraction - reserve) / cost), capped by the CPU count and
-// never below 1. An explicit override wins.
-func Slots(totalMB uint64, cpus int, c Config) int {
+// Bounds of the reserve when it follows the machine's memory.
+const (
+	reserveShare = 0.06
+	minReserveMB = 1024
+	maxReserveMB = 4096
+)
+
+// ForMachine resolves the settings that depend on the machine. Without a
+// configured reserve, it is 6% of total memory, between 1 GB and 4 GB: a
+// bigger machine runs a bigger editor and browser, and a fixed gigabyte
+// leaves the out-of-memory guard too little time there.
+func (c Config) ForMachine(totalMB uint64) Config {
 	c = c.Normalize()
+	if c.ReserveMB == 0 {
+		c.ReserveMB = min(max(uint64(float64(totalMB)*reserveShare), minReserveMB), maxReserveMB)
+	}
+	return c
+}
+
+// Slots computes the number of weight-1 jobs that may run at once:
+// floor((total x fraction - reserve) / cost), at most half the CPU count
+// (a heavy command keeps several cores busy) and never below 1. An explicit
+// override wins.
+func Slots(totalMB uint64, cpus int, c Config) int {
+	c = c.ForMachine(totalMB)
 	if c.Slots > 0 {
 		return c.Slots
 	}
 	budget := float64(totalMB)*c.MemoryFraction - float64(c.ReserveMB)
 	n := int(math.Floor(budget / float64(c.CostMB)))
-	if cpus > 0 && n > cpus {
-		n = cpus
+	if limit := max(cpus/2, 1); cpus > 0 && n > limit {
+		n = limit
 	}
 	return max(n, 1)
 }

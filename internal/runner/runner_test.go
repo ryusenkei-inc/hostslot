@@ -247,6 +247,16 @@ func TestWithWorkers(t *testing.T) {
 	if strings.Contains(ci, "npm_config") || !strings.Contains(ci, "HOSTSLOT_WORKERS=3") {
 		t.Fatalf("CI handling: %v", ci)
 	}
+	for _, want := range []string{"CARGO_BUILD_JOBS=3", "GOFLAGS=-p=3", "MAKEFLAGS=-j3"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("missing %s: %v", want, env)
+		}
+	}
+	// GOFLAGS and MAKEFLAGS hold other flags too: a set one is left alone.
+	kept := strings.Join(withWorkers([]string{"GOFLAGS=-mod=vendor", "MAKEFLAGS=-s"}, 3), " ")
+	if !strings.Contains(kept, "GOFLAGS=-mod=vendor") || strings.Contains(kept, "GOFLAGS=-p=3") || strings.Contains(kept, "MAKEFLAGS=-j3") {
+		t.Fatalf("flags overwritten: %v", kept)
+	}
 }
 
 func TestJobContext(t *testing.T) {

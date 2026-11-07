@@ -55,6 +55,7 @@ func fallbackStatus(p *platform.Platform) (*daemon.Status, error) {
 		return nil, err
 	}
 	cpus := p.Metrics.CPUs()
+	cfg = cfg.ForMachine(mem.TotalMB)
 	slots := gate.Slots(mem.TotalMB, cpus, cfg)
 	used := 0
 	for i := range slots {

@@ -124,8 +124,11 @@ func New(cfg Config, slots int, est Estimator) *Scheduler {
 	return &Scheduler{cfg: cfg.Normalize(), slots: max(slots, 1), est: est, running: map[uint64]*Job{}}
 }
 
-// SetSlots changes the slot count, e.g. after a config reload.
-func (s *Scheduler) SetSlots(n int) { s.slots = max(n, 1) }
+// SetConfig applies a reloaded configuration with its slot count.
+func (s *Scheduler) SetConfig(c Config, slots int) {
+	s.cfg = c.Normalize()
+	s.slots = max(slots, 1)
+}
 
 // Enqueue adds a request to the waiting queue.
 func (s *Scheduler) Enqueue(r Request, now time.Time) *Job {

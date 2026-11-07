@@ -103,10 +103,11 @@ func (s *Server) Serve(l net.Listener) error {
 	if s.Store != nil {
 		est = s.Store
 	}
+	cfg = cfg.ForMachine(s.memory.TotalMB)
 	s.sched = gate.New(cfg, gate.Slots(s.memory.TotalMB, s.Metrics.CPUs(), cfg), est)
 	s.grants = map[uint64]chan struct{}{}
 	s.stops = map[uint64]chan struct{}{}
-	s.reserve = cfg.Normalize().ReserveMB
+	s.reserve = cfg.ReserveMB
 	s.cfg = cfg
 	s.lastActive = time.Now()
 
@@ -170,8 +171,9 @@ func (s *Server) cycleLocked(full bool) {
 	}
 	if full {
 		if cfg, err := s.LoadConfig(); err == nil {
-			s.sched.SetSlots(gate.Slots(s.memory.TotalMB, s.Metrics.CPUs(), cfg))
-			s.reserve = cfg.Normalize().ReserveMB
+			cfg = cfg.ForMachine(s.memory.TotalMB)
+			s.sched.SetConfig(cfg, gate.Slots(s.memory.TotalMB, s.Metrics.CPUs(), cfg))
+			s.reserve = cfg.ReserveMB
 			s.cfg = cfg
 		}
 		s.stopLargestLocked()
@@ -252,7 +254,7 @@ func (s *Server) status() *Status {
 		Tracker:   s.Tracker,
 		Snapshot:  s.sched.SnapshotAt(time.Now(), s.memory.FreeMB),
 		Room:      s.sched.Room(time.Now(), s.memory.FreeMB),
-		ReserveMB: s.cfg.Normalize().ReserveMB,
+		ReserveMB: s.cfg.ReserveMB,
 		CeilingMB: gate.Ceiling(s.memory.TotalMB, s.cfg),
 		Recent:    slices.Clone(s.recent),
 	}
