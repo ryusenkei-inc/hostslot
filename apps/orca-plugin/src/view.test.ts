@@ -112,6 +112,10 @@ it('sums up guard stops; each stopped job stays a row of Recent', () => {
   const later = view(status({ recent }), '', [], 0, now + 30 * 60_000);
   expect(later.stops).toEqual([]);
   expect(later.recent).toHaveLength(6);
+  const dismissed = view(status({ recent }), '', [], 0, now, Date.parse('2026-11-06T10:04:00Z'));
+  expect(dismissed.stops).toEqual([]);
+  const partly = view(status({ recent }), '', [], 0, now, Date.parse('2026-11-06T10:01:00Z'));
+  expect(partly.stops.map((g) => g.key)).toEqual(['ceiling']);
 });
 
 it('lists dev servers, running first, and says when one listens elsewhere', () => {

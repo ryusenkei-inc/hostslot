@@ -8,6 +8,7 @@ import {
   Collapsible,
   EmptyState,
   Heading,
+  IconButton,
   KeyValue,
   Link,
   List,
@@ -170,6 +171,9 @@ function Stops({ v }: { v: View }) {
   return (
     <Callout tone="danger" title="Stopped by a guard">
       <Stack gap="md">
+        <Row justify="end">
+          <IconButton icon="close" label="Dismiss" tooltip="Dismiss until a guard stops another job" size="sm" variant="ghost" onPress={() => void plugin.request('stops.dismiss', {})} />
+        </Row>
         {v.stops.map((g) => (
           <Stack key={g.key} gap="xs">
             <Text weight="semibold">{g.title}</Text>

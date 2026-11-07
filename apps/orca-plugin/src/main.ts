@@ -14,7 +14,7 @@ import { type ActionResult, type Setup, type View, view } from './view.ts';
 type OrcaWorkerApi = {
   host: { call(method: 'statusBar.update', params: { id: string } & Partial<Item>): Promise<unknown> };
   panels: {
-    handle(name: 'view.get' | 'install' | 'setup', handler: () => unknown): void;
+    handle(name: 'view.get' | 'install' | 'setup' | 'stops.dismiss', handler: () => unknown): void;
     post(name: 'view', payload: View): void;
   };
   log(message: string): void;
@@ -116,6 +116,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   let checkedFile: string | undefined;
   let polls = 0;
   let showingFixture = false;
+  let stopsDismissedAt = 0;
   const target = installedPath();
   // The install or setup the person started from the panel.
   let task: Pick<Setup, 'progress' | 'result'> = {};
@@ -142,7 +143,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   // Logged when it changes, for `orca plugin logs` when the item looks wrong.
   let state = '';
   const publish = () => {
-    current = view(last, reason, problems, checks);
+    current = view(last, reason, problems, checks, Date.now(), stopsDismissedAt);
     const action = showingFixture ? undefined : offer({ found: Boolean(found), binary, plugin, problems, target });
     current.setup = { ...current.setup, ...(action ? { action } : {}), ...task };
     // Posts reach the panel only while it is open; it asks for the latest when it opens.
@@ -222,6 +223,10 @@ export default function activate(orca: OrcaWorkerApi): void {
   };
 
   orca.panels.handle('view.get', () => current);
+  orca.panels.handle('stops.dismiss', () => {
+    stopsDismissedAt = Math.max(stopsDismissedAt, ...current.stops.map((g) => g.last));
+    publish();
+  });
 
   // Each poll waits for the previous one, so a slow `hostslot status` never piles up.
   const loop = async () => {
