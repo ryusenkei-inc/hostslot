@@ -138,8 +138,11 @@ function DevServers({ v }: { v: View }) {
         </List>
       )}
       {idle > 0 ? (
-        <Collapsible title="Assigned ports" description={`${idle} not running`}>
+        <Collapsible title="Assigned ports" description={`${idle} kept for their worktrees`}>
           <Stack gap="md">
+            <Text size="sm" muted>
+              Not running now. Each port stays with its worktree and is freed when the worktree is removed.
+            </Text>
             {v.assigned.map((g) => (
               <Stack key={g.repo} gap="xs">
                 <Text weight="semibold">{g.repo}</Text>
