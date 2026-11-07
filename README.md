@@ -32,7 +32,7 @@ hostslot serve -- pnpm dev     # runs the dev server on this worktree's port
 
 ## Why
 
-Several agents, each in its own worktree, start `tsc`, test suites and builds at the same time. On a 16 GB machine that exhausts memory: everything freezes and the OOM killer takes agents with it. Their dev servers also start on the same default ports, and some quietly move to the next one, so an agent's tests reach another worktree's app. Agent IDEs can cap the number of agents, but nothing coordinates what the agents run.
+When memory runs out, the OOM killer takes agents with it, and a dev server that quietly moved to the next port answers another worktree's tests. Agent IDEs can cap the number of agents, but nothing coordinates what the agents run.
 
 ### Why at the process level
 
@@ -44,6 +44,8 @@ Several agents, each in its own worktree, start `tsc`, test suites and builds at
 | It works with anything | A command line in, the same command out: one scheduler for agents, people, git hooks and scripts |
 
 The OS's own tools don't queue: cgroups and Job Object limits make a capped build fail instead of wait, early-OOM killers act after memory is gone, and the scheduler has no notion of jobs worth waiting for. Hostslot uses those mechanisms and adds a queue, priorities and learned costs.
+
+## Compared with other tools
 
 ### Hostslot and Orca
 
@@ -60,7 +62,7 @@ Hostslot is made for Orca first, and the two do different jobs: Orca runs, shows
 | Dev-server ports | Shows listening ports per workspace | Gives each worktree's dev server its own port and tells the agent the URL |
 | Scope | Orca's terminals | The whole machine: any editor or terminal, agent hooks, git hooks, scripts |
 
-### Compared with similar tools
+### Similar tools
 
 | | File-lock wrappers | Generic command queues | OS limits (cgroups, Job Objects) | Per-worktree port tools | **Hostslot** |
 | --- | --- | --- | --- | --- | --- |
@@ -75,7 +77,9 @@ Hostslot is made for Orca first, and the two do different jobs: Orca runs, shows
 | Shows what runs and waits | No | Its own list | No | Ports in use | Status bar and panel in Orca, `hostslot status` |
 | Windows, macOS, Linux | Mostly macOS and Linux | Varies | One OS each | Varies | All three |
 
-## How it works
+## Heavy commands
+
+### How it works
 
 | | |
 | --- | --- |
@@ -98,7 +102,7 @@ Hostslot is made for Orca first, and the two do different jobs: Orca runs, shows
 | Wait limit | `--max-wait` gives up on waiting; the command never runs without a slot | `75` |
 | Timeout | `--timeout` stops the job after it has run that long | `124` |
 
-## What counts as heavy
+### What counts as heavy
 
 You decide with `hostslot run`. The integrations decide like this:
 
@@ -117,9 +121,21 @@ A command is heavy when it is one of:
 
 The line is parsed as shell, so text in quotes, heredocs and comments never counts. Installs, git, formatters and prose linters stay ungated and never wait. `hostslot hook claude --match <regex>` (or `hook codex`) replaces the list.
 
+### What it learns
+
+Each finished job adds a sample to `samples.json` in the data directory. Nothing leaves the machine.
+
+| | |
+| --- | --- |
+| **Key** | Repository (its common git directory, shared by worktrees) + path inside it + the command (`pnpm test`, or `--as`) |
+| **Sample** | Peak memory of the whole process tree (committed on Windows, resident on Linux and macOS), duration, exit code, outcome; the last 10 per key |
+| **Estimate** | Under 3 samples: similar work (the same command elsewhere, else the same tool and subcommand, else the same tool), else the weight hint. From 3: the 90th percentile of its own peaks |
+| **Used for** | Admission, memory held for growing jobs, weight in slots, time-left estimates in Orca |
+| **Not learned** | Runs stopped by `--timeout`. Runs stopped for memory are kept: they need at least that much |
+
 ## Dev-server ports
 
-Parallel worktrees, of one repository or several, start the same dev servers on the same default ports, and some (Vite) quietly move to the next one. Hostslot gives each service of each worktree its own port, keeps it, and hands it over:
+Hostslot gives each service of each worktree, of one repository or several, its own port, keeps it, and hands it over:
 
 ```sh
 hostslot serve -- pnpm dev          # hostslot: shop on http://localhost:21643 (PORT=21643)
@@ -138,19 +154,10 @@ hostslot port --list                # every assigned port: worktree, running, wh
 | **Freed** | When the worktree is removed |
 | **Slots** | None: a dev server runs for hours and doesn't wait for capacity |
 
-Agents' dev-server commands go through `hostslot serve` by themselves: the hooks below rewrite them and tell the agent the URL.
+Agents' dev-server commands go through `hostslot serve` by themselves: the hooks rewrite them and tell the agent the URL. A command is a dev server when it is one of:
 
-## What it learns
-
-Each finished job adds a sample to `samples.json` in the data directory. Nothing leaves the machine.
-
-| | |
-| --- | --- |
-| **Key** | Repository (its common git directory, shared by worktrees) + path inside it + the command (`pnpm test`, or `--as`) |
-| **Sample** | Peak memory of the whole process tree (committed on Windows, resident on Linux and macOS), duration, exit code, outcome; the last 10 per key |
-| **Estimate** | Under 3 samples: similar work (the same command elsewhere, else the same tool and subcommand, else the same tool), else the weight hint. From 3: the 90th percentile of its own peaks |
-| **Used for** | Admission, memory held for growing jobs, weight in slots, time-left estimates in Orca |
-| **Not learned** | Runs stopped by `--timeout`. Runs stopped for memory are kept: they need at least that much |
+- a package script named `dev`, `start`, `serve`, `preview` or `dev:*`, or one whose body runs a dev server
+- `vite` (not `vite build`), `next dev|start`, `astro dev|preview`, `nuxt dev`, `wrangler dev`, `storybook dev`
 
 ## Integrations
 
@@ -188,7 +195,6 @@ pnpm dev
 
 - A slot is held only while `pnpm test` runs, and `cd` carries over to the agent's next command
 - Waiting doesn't eat into the command's timeout: the hook raises the Bash tool's timeout to 10 minutes, keeps the command's own as `--timeout` and gives the rest to `--max-wait`. Out of time, the call exits `75` so the agent can retry
-- Dev-server commands: package scripts `dev`, `start`, `serve`, `preview` (also `dev:*`), `vite` (not `vite build`), `next dev|start`, `astro dev|preview`, `nuxt dev`, `wrangler dev`, `storybook dev`, and scripts that run one
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it
 - `HOSTSLOT_DISABLE=1` in the environment or the command line turns it off
 
