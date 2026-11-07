@@ -208,6 +208,12 @@ func DetachedAttr() *syscall.SysProcAttr {
 	}
 }
 
+// hideWindow keeps a console tool started by the daemon, which has no
+// console of its own, from opening a window.
+func hideWindow(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW, HideWindow: true}
+}
+
 // ---- IPC: named pipe ----
 
 // Each daemon listens on its own pipe and writes the name to pipeFile.

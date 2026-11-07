@@ -163,6 +163,8 @@ func processAlive(pid int) bool {
 // DetachedAttr returns process attributes for a daemon that outlives the CLI.
 func DetachedAttr() *syscall.SysProcAttr { return &syscall.SysProcAttr{Setsid: true} }
 
+func hideWindow(*exec.Cmd) {}
+
 // ---- IPC: Unix socket ----
 
 type socketIPC struct{ path string }

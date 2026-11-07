@@ -90,6 +90,8 @@ type Status struct {
 	CPUBusyPct *int `json:"cpuBusyPct,omitempty"`
 	// CPUBusyLimitPct is where background jobs stop being admitted.
 	CPUBusyLimitPct int `json:"cpuBusyLimitPct,omitempty"`
+	// GPU is the first NVIDIA GPU's memory; missing without one.
+	GPU *platform.GPU `json:"gpu,omitempty"`
 	// Recent are the jobs that ended last, newest first.
 	Recent []Finished `json:"recent,omitempty"`
 }
