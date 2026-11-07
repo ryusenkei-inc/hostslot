@@ -6,7 +6,7 @@
 
 Run more coding agents in parallel without freezing your machine.
 
-Hostslot schedules what parallel coding agents share on one machine:
+Four agents in four worktrees start `tsc`, a test suite and a build at the same moment, and a 16 GB laptop locks up. Their dev servers all want port 5173, so one agent's tests reach another agent's app. Hostslot schedules what the agents share on one machine:
 
 - **Capacity for heavy commands.** Type checks, test runners and builds start when there is room in memory and CPU; the rest wait their turn, and a runaway is stopped before it takes the machine down
 - **A port for each dev server.** Every worktree's dev server gets its own port, and agents are told the URL, so they never reach another worktree's server
