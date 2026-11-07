@@ -64,6 +64,13 @@ export type PortRow = {
   note?: string;
 };
 
+/** Ports of dev servers not running, by repository. */
+export type AssignedGroup = {
+  repo: string;
+  /** The main checkout first, then worktrees and services by name. */
+  rows: { key: string; worktree: string; name: string; port: string }[];
+};
+
 /** What one guard stopped recently, summed up; each job is a row of Recent. */
 export type GuardStops = {
   key: string;
@@ -122,6 +129,7 @@ export type View = {
   waiting: WaitRow[];
   /** Dev servers' ports, running first. */
   ports: PortRow[];
+  assigned: AssignedGroup[];
   stops: GuardStops[];
   recent: RecentRow[];
   byRepo: { key: string; repo: string; summary: string }[];
@@ -150,6 +158,7 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
       running: [],
       waiting: [],
       ports: [],
+      assigned: [],
       stops: [],
       recent: [],
       byRepo: [],
@@ -241,7 +250,8 @@ export function view(s: Status | undefined, reason = '', problems: Problem[] = [
         ...(eta === undefined ? {} : { eta: `~${duration(eta)}` }),
       };
     }),
-    ports: portRows(s.ports ?? []),
+    ports: portRows(s.ports ?? []).filter((p) => p.running),
+    assigned: assignedGroups(portRows(s.ports ?? []).filter((p) => !p.running)),
     stops: guardStops(s, now),
     recent: (s.recent ?? []).map((f, i) => {
       const [label, oTone, detail] = outcomes[f.outcome] ?? [f.outcome, 'neutral', f.outcome];
@@ -293,6 +303,24 @@ function portRows(entries: PortEntry[]): PortRow[] {
     };
   });
   return rows.sort((a, b) => Number(b.running) - Number(a.running));
+}
+
+const mainCheckout = 'main checkout';
+
+function assignedGroups(rows: PortRow[]): AssignedGroup[] {
+  const groups = new Map<string, AssignedGroup['rows']>();
+  for (const r of rows) {
+    const m = /^(.*) \((.*)\)$/.exec(r.where);
+    const repo = m?.[1] ?? r.where;
+    const list = groups.get(repo) ?? [];
+    list.push({ key: r.key, worktree: m?.[2] ?? mainCheckout, name: r.name, port: r.url.replace('http://localhost:', '') });
+    groups.set(repo, list);
+  }
+  const order = (a: AssignedGroup['rows'][number], b: AssignedGroup['rows'][number]) =>
+    Number(b.worktree === mainCheckout) - Number(a.worktree === mainCheckout) || a.worktree.localeCompare(b.worktree) || a.name.localeCompare(b.name);
+  return [...groups]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([repo, list]) => ({ repo, rows: list.sort(order) }));
 }
 
 const guards: { outcome: string; title: string; explanation: (s: Status) => string }[] = [

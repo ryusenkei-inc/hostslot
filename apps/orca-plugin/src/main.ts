@@ -115,6 +115,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   let binary = '';
   let checkedFile: string | undefined;
   let polls = 0;
+  let showingFixture = false;
   const target = installedPath();
   // The install or setup the person started from the panel.
   let task: Pick<Setup, 'progress' | 'result'> = {};
@@ -142,7 +143,7 @@ export default function activate(orca: OrcaWorkerApi): void {
   let state = '';
   const publish = () => {
     current = view(last, reason, problems, checks);
-    const action = offer({ found: Boolean(found), binary, plugin, problems, target });
+    const action = showingFixture ? undefined : offer({ found: Boolean(found), binary, plugin, problems, target });
     current.setup = { ...current.setup, ...(action ? { action } : {}), ...task };
     // Posts reach the panel only while it is open; it asks for the latest when it opens.
     orca.panels.post('view', current);
@@ -196,6 +197,7 @@ export default function activate(orca: OrcaWorkerApi): void {
 
   const refresh = async () => {
     const fixture = readFixture();
+    showingFixture = fixture !== undefined;
     last = fixture ?? (await status());
     if (fixture) {
       problems = [];

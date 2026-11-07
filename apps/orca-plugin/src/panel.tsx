@@ -113,9 +113,9 @@ function Waiting({ v }: { v: View }) {
 }
 
 function DevServers({ v }: { v: View }) {
-  if (v.ports.length === 0) return null;
-  const running = v.ports.filter((p) => p.running);
-  const idle = v.ports.filter((p) => !p.running);
+  if (v.ports.length === 0 && v.assigned.length === 0) return null;
+  const running = v.ports;
+  const idle = v.assigned.reduce((n, g) => n + g.rows.length, 0);
   return (
     <Stack gap="sm">
       <Heading level={2}>Dev servers</Heading>
@@ -137,9 +137,24 @@ function DevServers({ v }: { v: View }) {
           ))}
         </List>
       )}
-      {idle.length > 0 ? (
-        <Collapsible title="Assigned ports" description={`${idle.length} not running`}>
-          <KeyValue label="Assigned ports" items={idle.map((p) => ({ label: p.where === p.name ? p.name : `${p.name} · ${p.where}`, value: p.url.replace('http://localhost:', '') }))} />
+      {idle > 0 ? (
+        <Collapsible title="Assigned ports" description={`${idle} not running`}>
+          <Stack gap="md">
+            {v.assigned.map((g) => (
+              <Stack key={g.repo} gap="xs">
+                <Text weight="semibold">{g.repo}</Text>
+                <Table
+                  label={`Assigned ports of ${g.repo}`}
+                  columns={[
+                    { key: 'worktree', label: 'Worktree', minWidth: 'sm' },
+                    { key: 'name', label: 'Service', minWidth: 'xs' },
+                    { key: 'port', label: 'Port', align: 'end', minWidth: 'xs' },
+                  ]}
+                  rows={g.rows.map((r) => ({ key: r.key, cells: { worktree: r.worktree, name: r.name, port: r.port } }))}
+                />
+              </Stack>
+            ))}
+          </Stack>
         </Collapsible>
       ) : null}
     </Stack>
