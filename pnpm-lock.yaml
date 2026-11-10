@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@ryusenkei/conventions':
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.8.1
+        version: 0.8.1(typescript@5.9.3)
       '@ryusenkei/prose-lint':
         specifier: ^0.2.0
         version: 0.2.0
@@ -146,10 +146,15 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@ryusenkei/conventions@0.6.0':
-    resolution: {integrity: sha512-gUxL9NSnqeplTurEgMsqkwkrQB96Jib1RwcuM62mEEqKtPY2laaTxc6supuJ7BEPNYNLPCXZxIiVuGOMXl8lsg==}
+  '@ryusenkei/conventions@0.8.1':
+    resolution: {integrity: sha512-tfbHW0Dgn0MCCPjokTIcHJRXn8ZMs5AVQNsQb9dSFVgKRszJLJwNJlk+QJvj1MOlF74W2XaOwP3gQSdTdpoiQA==}
     engines: {node: '>=24'}
     hasBin: true
+    peerDependencies:
+      typescript: '>=5.0'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   '@ryusenkei/prose-lint@0.2.0':
     resolution: {integrity: sha512-HHQpQnaKZX5BGUdMFBb3Uu+hv28lqaL0p8VuHtWnbdWrTcQao4/gykCeavWuGkpPg1W+NmReZqj0GgtpICR+JQ==}
@@ -523,9 +528,11 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@ryusenkei/conventions@0.6.0':
+  '@ryusenkei/conventions@0.8.1(typescript@5.9.3)':
     dependencies:
       '@ryusenkei/prose-lint': 0.2.0
+    optionalDependencies:
+      typescript: 5.9.3
 
   '@ryusenkei/prose-lint@0.2.0': {}
 

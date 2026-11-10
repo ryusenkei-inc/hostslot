@@ -36,5 +36,23 @@
       "Read(./**/.env)",
       "Read(./**/.dev.vars)"
     ]
+  },
+  "extraKnownMarketplaces": {
+    "yomiyasu": {
+      "source": {
+        "source": "github",
+        "repo": "nanaism/yomiyasu"
+      }
+    },
+    "humanizer": {
+      "source": {
+        "source": "github",
+        "repo": "blader/humanizer"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "yomiyasu@yomiyasu": true,
+    "humanizer@humanizer": true
   }
 }
