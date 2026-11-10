@@ -1,5 +1,7 @@
 #!/bin/sh
 # push の前の検査（`check` のスクリプトを持つリポのみ。CI の失敗・Actions の消費を手元で防止）
+# git がフックに渡す GIT_DIR などを外す（検査の中の git が push 元のリポを書き換えるのを防止）
+unset $(git rev-parse --local-env-vars)
 # hostslot があれば資源の空きを待って実行（並行するエージェント・リポの重い検査によるメモリの枯渇を防止）
 #   `check` のないリポは枠を待たない
 if grep -q '"check":' package.json 2>/dev/null && command -v hostslot >/dev/null 2>&1; then
