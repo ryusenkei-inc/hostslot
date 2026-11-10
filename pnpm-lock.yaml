@@ -9,20 +9,17 @@ importers:
   .:
     devDependencies:
       '@ryusenkei/conventions':
-        specifier: ^0.8.1
-        version: 0.8.1(typescript@5.9.3)
+        specifier: ^0.8.2
+        version: 0.8.2(typescript@5.9.3)
       '@ryusenkei/prose-lint':
         specifier: ^0.2.0
         version: 0.2.0
-      '@types/cross-spawn':
-        specifier: ^6.0.6
-        version: 6.0.6
+      '@ryusenkei/scripts':
+        specifier: ^0.2.1
+        version: 0.2.1
       '@types/node':
         specifier: ^26.6.1
         version: 26.6.4
-      cross-spawn:
-        specifier: ^7.0.6
-        version: 7.0.6
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -146,8 +143,8 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@ryusenkei/conventions@0.8.1':
-    resolution: {integrity: sha512-tfbHW0Dgn0MCCPjokTIcHJRXn8ZMs5AVQNsQb9dSFVgKRszJLJwNJlk+QJvj1MOlF74W2XaOwP3gQSdTdpoiQA==}
+  '@ryusenkei/conventions@0.8.2':
+    resolution: {integrity: sha512-c7HMhLJZ5YR7sZrArW0caZeSuLe2lKlnfw3ArzgbuEuUT5eyUwvU+GDSpT0atlkBn9hJvPWrUbXKH1DeVjv99Q==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -161,11 +158,13 @@ packages:
     engines: {node: '>=24'}
     hasBin: true
 
+  '@ryusenkei/scripts@0.2.1':
+    resolution: {integrity: sha512-1sx58CgLrCNo28wNlfF/XqtBx4wiEV18P+yCYP6mbyqdiLhXHafbzf5HUt4Wj6FZOvo5l/91AnPDDmTXSWGMLg==}
+    engines: {node: '>=24'}
+    hasBin: true
+
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
-
-  '@types/cross-spawn@6.0.6':
-    resolution: {integrity: sha512-fXRhhUkG4H3TQk5dBhQ7m/JDdSNHKwR2BBia62lhwEIq9xGiQKLxd6LymNhn47SjXhsUEPmxi+PKw2OkW4LLjA==}
 
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
@@ -528,7 +527,7 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@ryusenkei/conventions@0.8.1(typescript@5.9.3)':
+  '@ryusenkei/conventions@0.8.2(typescript@5.9.3)':
     dependencies:
       '@ryusenkei/prose-lint': 0.2.0
     optionalDependencies:
@@ -536,14 +535,14 @@ snapshots:
 
   '@ryusenkei/prose-lint@0.2.0': {}
 
+  '@ryusenkei/scripts@0.2.1':
+    dependencies:
+      cross-spawn: 7.0.6
+
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
-
-  '@types/cross-spawn@6.0.6':
-    dependencies:
-      '@types/node': 26.6.4
 
   '@types/deep-eql@4.0.2': {}
 

@@ -7,21 +7,21 @@
     "node": ">=24"
   },
   "scripts": {
-    "lint": "pnpm typecheck && prose-lint && ryusenkei-conventions check && go vet ./...",
+    "lint": "pnpm typecheck && prose-lint && pnpm lint:deps && ryusenkei-conventions check && go vet ./...",
     "lint:prose": "prose-lint",
+    "lint:deps": "node scripts/deps.ts",
     "typecheck": "pnpm -r --if-present typecheck && tsc",
     "test": "go test ./... && vitest run --passWithNoTests",
     "check": "pnpm lint && pnpm test",
     "env:push": "node scripts/env.ts push",
-    "repo:settings": "node scripts/repo.ts",
+    "repo:settings": "ryusenkei-repo-settings",
     "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
-    "@ryusenkei/conventions": "^0.8.1",
+    "@ryusenkei/conventions": "^0.8.2",
     "@ryusenkei/prose-lint": "^0.2.0",
-    "@types/cross-spawn": "^6.0.6",
+    "@ryusenkei/scripts": "^0.2.1",
     "@types/node": "^26.6.1",
-    "cross-spawn": "^7.0.6",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
   }
