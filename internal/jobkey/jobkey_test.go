@@ -12,6 +12,14 @@ func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	// Drop GIT_DIR and the like: inside a Git hook (pre-push runs `pnpm check`)
+	// they point at the outer repository, which would receive the commit, the
+	// worktree and `core.bare` from `git init` instead of the temp repository.
+	for _, kv := range os.Environ() {
+		if !strings.HasPrefix(strings.ToUpper(kv), "GIT_") {
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
 	}
