@@ -8,7 +8,8 @@ import (
 
 // AcceptRTK reports whether rewritten, the line `rtk rewrite` made of line,
 // may replace it: rtk only put `rtk` before some of its commands, and none
-// of those commands is a dev server (dev, DefaultDevServer when nil).
+// of those commands is a dev server (dev, DefaultDevServer when nil) or a
+// tool in rtkLossy.
 //
 // rtk also maps some commands to its own (`pnpm lint` to `rtk lint`, which
 // runs ESLint instead of the package's lint script); such a rewrite changes
@@ -36,6 +37,9 @@ func AcceptRTK(line, rewritten, dir string, dev *regexp.Regexp) bool {
 			continue
 		}
 		changed = true
+		if slices.Contains(rtkLossy, inner[0]) {
+			return false
+		}
 		c := strings.Join(inner, " ")
 		if dev.MatchString(c) || len(HeavyIn(c, dir, dev)) > 0 {
 			return false
@@ -43,3 +47,8 @@ func AcceptRTK(line, rewritten, dir string, dev *regexp.Regexp) bool {
 	}
 	return changed
 }
+
+// rtkLossy are tools whose failures rtk can hide: with Vitest 5, rtk 1.2's
+// parser fails and prints only where the JSON report went, not which tests
+// failed or why.
+var rtkLossy = []string{"vitest"}

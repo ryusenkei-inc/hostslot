@@ -27,9 +27,10 @@ func TestAcceptRTK(t *testing.T) {
 		{"git status", "git status"},             // nothing to do
 		{"pnpm run dev", "rtk pnpm run dev"},     // a dev server
 		{"git status; vite", "rtk git status; rtk vite"},
-		{"git status", "rtk git status 'x"},    // does not parse
-		{"git status && ls", "rtk git status"}, // a command lost
-		{"echo a", "rtk echo a && rm x"},       // a command added
+		{"git status", "rtk git status 'x"},            // does not parse
+		{"git status && ls", "rtk git status"},         // a command lost
+		{"echo a", "rtk echo a && rm x"},               // a command added
+		{"vitest packages/a", "rtk vitest packages/a"}, // failures hidden
 	}
 	for _, c := range refused {
 		if AcceptRTK(c[0], c[1], "", nil) {

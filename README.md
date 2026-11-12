@@ -209,7 +209,7 @@ pnpm run check
 ```
 
 - The hook runs `rtk rewrite` on the line first and gates the result; a heavy command keeps its name for learning (`pnpm run check`, not `rtk pnpm run check`)
-- It takes a rewrite only when rtk just put `rtk` before commands. A rewrite that changes a command is dropped: `pnpm lint` to `rtk lint` would run ESLint instead of the package's `lint` script. So are lines that start a dev server, whose output rtk would hold back
+- It takes a rewrite only when rtk just put `rtk` before commands. A rewrite that changes a command is dropped: `pnpm lint` to `rtk lint` would run ESLint instead of the package's `lint` script. So are lines that start a dev server, whose output rtk would hold back, and Vitest, whose failures rtk 1.2 can drop
 - Without rtk on the `PATH`, the hook works as before; `hostslot doctor` warns
 - rtk rewrites only the commands it knows: `pnpm run check`, not `pnpm check` or `pnpm test`. Only Claude Code; Codex calls stay as they are
 
