@@ -41,6 +41,12 @@ type ClaudeOptions struct {
 	Dev *regexp.Regexp
 	// DevContext, when set, tells Claude where the dev servers listen.
 	DevContext DevContext
+	// RTK, when set, returns the line `rtk rewrite` makes of a line, and
+	// whether it made one. The hook uses it before gating, when AcceptRTK
+	// allows it, so the output of commands is compressed by rtk and heavy
+	// commands still go through hostslot (`hostslot run … -- rtk pnpm run
+	// check`).
+	RTK func(line string) (string, bool)
 }
 
 type claudeInput struct {
@@ -51,8 +57,10 @@ type claudeInput struct {
 
 // Claude reads a Claude Code PreToolUse event from in and, when it is a
 // Bash call with heavy or dev-server commands, writes a response that puts
-// `hostslot run … --` or `hostslot serve --` before each of them. Other
-// events produce no output, which leaves the call unchanged.
+// `hostslot run … --` or `hostslot serve --` before each of them. With RTK
+// set, the line is first the one rtk makes, which is returned even when
+// nothing in it is gated. Other events produce no output, which leaves the
+// call unchanged.
 func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 	var ev claudeInput
 	if err := json.NewDecoder(in).Decode(&ev); err != nil {
@@ -72,15 +80,25 @@ func Claude(in io.Reader, out io.Writer, o ClaudeOptions) error {
 		ms, _ := input["timeout"].(float64)
 		budget, toolTimeout = claudeBudget(time.Duration(ms) * time.Millisecond)
 	}
+	line := command
+	if o.RTK != nil && !disabledIn(command) {
+		if r, ok := o.RTK(command); ok && AcceptRTK(command, r, ev.Cwd, o.Dev) {
+			line = r
+		}
+	}
 	rules, prefix, devLabels := gateRules(o.Heavy, o.Dev, ev.Cwd, func(label string, count int) string {
 		return claudePrefix(o.Exe, label, o.Weight, budget.share(count))
 	}, shellExe(o.Exe)+" serve -- ")
-	rewritten, _, ok := GateInPlace(command, ev.Cwd, rules, prefix)
-	if !ok {
+	rewritten, _, gated := GateInPlace(line, ev.Cwd, rules, prefix)
+	switch {
+	case gated:
+		if toolTimeout > 0 {
+			input["timeout"] = toolTimeout.Milliseconds()
+		}
+	case line != command:
+		rewritten = line
+	default:
 		return nil
-	}
-	if toolTimeout > 0 {
-		input["timeout"] = toolTimeout.Milliseconds()
 	}
 	input["command"] = rewritten
 	output := map[string]any{"hookEventName": "PreToolUse", "updatedInput": input}
@@ -131,6 +149,7 @@ func heavyCommands(line string, heavy *regexp.Regexp, scripts packageScripts, ho
 		if isSelf(words[0]) {
 			return nil
 		}
+		words = throughRTK(words)
 		c := strings.Join(words, " ")
 		if heavy.MatchString(c) {
 			found = append(found, c)
@@ -296,6 +315,16 @@ func claudeBudget(asked time.Duration) (b Budget, toolTimeout time.Duration) {
 // skip a line that only mentions it, which is the safe side.
 func disabledIn(line string) bool {
 	return strings.Contains(line, "HOSTSLOT_DISABLE=1")
+}
+
+// throughRTK drops a leading `rtk` word, so `rtk pnpm run check` (the
+// line `rtk rewrite` makes of `pnpm run check`) is gated and learned as
+// `pnpm run check`; rtk only filters the command's output.
+func throughRTK(words []string) []string {
+	if len(words) > 1 && words[0] == "rtk" {
+		return words[1:]
+	}
+	return words
 }
 
 // isSelf reports whether a command runs hostslot itself, so a line is not

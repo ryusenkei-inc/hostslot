@@ -62,6 +62,9 @@ func cmdDoctor(args []string) int {
 	if dir, err := os.Getwd(); err == nil {
 		checks = append(checks, portChecks(dir)...)
 	}
+	if rtkEnabled() {
+		checks = append(checks, rtkCheck())
+	}
 	if disabled() {
 		checks = append(checks, check{Level: "warn", Text: "HOSTSLOT_DISABLE=1 is set: commands run without the gate",
 			Title: "Hostslot is turned off", Detail: "HOSTSLOT_DISABLE=1 is set, so commands run without the gate."})
@@ -178,4 +181,14 @@ func printChecks(w io.Writer, checks []check) int {
 		}
 	}
 	return code
+}
+
+// rtkCheck reports whether the rtk that HOSTSLOT_RTK=1 asks for is there.
+func rtkCheck() check {
+	exe, err := exec.LookPath("rtk")
+	if err != nil {
+		return check{Level: "warn", Text: "HOSTSLOT_RTK=1 is set, but rtk is not on the PATH: the Claude Code hook leaves output as it is",
+			Title: "rtk not found", Detail: "HOSTSLOT_RTK=1 is set, but rtk is not on the PATH."}
+	}
+	return check{Level: "ok", Text: "Claude Code hook: commands go through rtk (" + exe + ") before the gate"}
 }

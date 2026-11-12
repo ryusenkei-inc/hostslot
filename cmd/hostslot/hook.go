@@ -1,14 +1,19 @@
 package main
 
 import (
+	"bytes"
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/ryusenkei-inc/hostslot/internal/hook"
 )
@@ -43,7 +48,11 @@ func cmdHook(args []string) int {
 	}
 	var err error
 	if agent == "claude" {
-		err = hook.Claude(os.Stdin, os.Stdout, hook.ClaudeOptions{Heavy: heavy, Weight: *weight, Exe: hookExe(), DevContext: devContext})
+		o := hook.ClaudeOptions{Heavy: heavy, Weight: *weight, Exe: hookExe(), DevContext: devContext}
+		if rtkEnabled() {
+			o.RTK = rtkRewrite
+		}
+		err = hook.Claude(os.Stdin, os.Stdout, o)
 	} else {
 		o := hook.CodexOptions{Heavy: heavy, Weight: *weight, Exe: hookExe(), PowerShell: runtime.GOOS == "windows", DevContext: devContext}
 		err = hook.Codex(os.Stdin, os.Stdout, o)
@@ -64,4 +73,37 @@ func hookExe() string {
 		return "hostslot"
 	}
 	return exe
+}
+
+// rtkEnabled reports whether the Claude Code hook passes lines through rtk
+// first (HOSTSLOT_RTK=1). It is off by default: rtk changes what the agent
+// reads, so it is turned on per machine after checking its output.
+func rtkEnabled() bool {
+	return os.Getenv("HOSTSLOT_RTK") == "1"
+}
+
+// rtkTimeout bounds `rtk rewrite`, which runs before every Bash call.
+const rtkTimeout = 2 * time.Second
+
+// rtkRewrite returns the line `rtk rewrite` makes of line. rtk prints a
+// rewrite with exit code 0 (its allow rules cover the line) or 3 (approval
+// is left to Claude Code); hostslot never decides approval, so both count.
+// Any other result, or no rtk on the PATH, leaves the line as it is.
+func rtkRewrite(line string) (string, bool) {
+	exe, err := exec.LookPath("rtk")
+	if err != nil {
+		return "", false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), rtkTimeout)
+	defer cancel()
+	var out bytes.Buffer
+	cmd := exec.CommandContext(ctx, exe, "rewrite", line)
+	cmd.Stdout = &out
+	err = cmd.Run()
+	var exit *exec.ExitError
+	if err != nil && (!errors.As(err, &exit) || exit.ExitCode() != 3) {
+		return "", false
+	}
+	rewritten := strings.TrimRight(out.String(), "\r\n")
+	return rewritten, rewritten != ""
 }

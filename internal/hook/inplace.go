@@ -55,6 +55,7 @@ func GateInPlace(line, dir string, heavy *regexp.Regexp, prefix func(label strin
 			ours = true
 			return false
 		}
+		words = throughRTK(words)
 		label := strings.Join(words, " ")
 		if isHeavyCall(words, label, heavy, scripts) {
 			sites = append(sites, site{call.Args[0].Pos().Offset(), label})
