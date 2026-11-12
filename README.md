@@ -198,6 +198,21 @@ pnpm dev
 - Permission rules see the rewritten command, so an allow rule such as `Bash(pnpm test:*)` no longer matches it
 - `HOSTSLOT_DISABLE=1` in the environment or the command line turns it off
 
+#### With rtk
+
+[rtk](https://github.com/rtk-ai/rtk) compresses command output for agents with a `PreToolUse` hook of its own, which also rewrites Bash commands. Two hooks that rewrite the same call don't combine, so let Hostslot's hook run rtk instead: set `HOSTSLOT_RTK=1` (in your environment, or in `env` of Claude Code's settings) and don't install rtk's hook. Off by default.
+
+```sh
+pnpm run check
+# becomes (abridged)
+'<hostslot>' run --as 'pnpm run check' -- rtk pnpm run check
+```
+
+- The hook runs `rtk rewrite` on the line first and gates the result; a heavy command keeps its name for learning (`pnpm run check`, not `rtk pnpm run check`)
+- It takes a rewrite only when rtk just put `rtk` before commands. A rewrite that changes a command is dropped: `pnpm lint` to `rtk lint` would run ESLint instead of the package's `lint` script. So are lines that start a dev server, whose output rtk would hold back, and Vitest, whose failures rtk 1.2 can drop
+- Without rtk on the `PATH`, the hook works as before; `hostslot doctor` warns
+- rtk rewrites only the commands it knows: `pnpm run check`, not `pnpm check` or `pnpm test`. Only Claude Code; Codex calls stay as they are
+
 ### Codex
 
 `hostslot setup` also adds a `PreToolUse` hook to `~/.codex/hooks.json` (or `$CODEX_HOME`). Codex runs a new or changed hook only after you trust it: start Codex and review it with `/hooks`.
@@ -273,6 +288,7 @@ Optional `config.json` in the data directory, reread every second. `0` means com
 | `HOSTSLOT_SLOTS`, `HOSTSLOT_COST_MB`, `HOSTSLOT_RESERVE_MB` | Override `slots`, `costMB`, `reserveMB` (read when the daemon starts) |
 | `HOSTSLOT_PRIORITY` | Default priority |
 | `HOSTSLOT_DISABLE=1` | Run commands without the gate |
+| `HOSTSLOT_RTK=1` | Claude Code hook: pass commands through rtk first (see [With rtk](#with-rtk)) |
 | `HOSTSLOT_NO_DAEMON=1` | Use the lock fallback |
 | `HOSTSLOT_SOURCE` | Default `--source` |
 | `HOSTSLOT_HOME` | Data directory; separate homes don't share slots |
