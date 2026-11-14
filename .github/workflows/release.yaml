@@ -1,4 +1,5 @@
 # Release on a `v*` tag: test, then build and publish binaries with GoReleaser (.goreleaser.yaml)
+#   The steps live in toolkit's shared workflow; the trigger and the permission stay here
 name: Release
 
 on:
@@ -10,25 +11,9 @@ permissions:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # the changelog and Go's VCS stamping need the tags and history
-      # Go version from go.mod
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: Test
-        run: go test ./...
+    uses: ryusenkei-inc/toolkit/.github/workflows/reusable-go-release.yaml@main
+    with:
       # The Orca plugin directory lists the newest vX.Y.Z tag with the version in orca-plugin.json
-      - name: Plugin version matches the tag
-        run: |
-          version=$(node -p "require('./orca-plugin.json').version")
-          test "v$version" = "$GITHUB_REF_NAME" || { echo "orca-plugin.json has $version, the tag is $GITHUB_REF_NAME"; exit 1; }
-      - uses: goreleaser/goreleaser-action@v7
-        with:
-          version: "~> v2"
-          args: release --clean
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      checks: |
+        version=$(node -p "require('./orca-plugin.json').version")
+        test "v$version" = "$GITHUB_REF_NAME" || { echo "orca-plugin.json has $version, the tag is $GITHUB_REF_NAME"; exit 1; }
