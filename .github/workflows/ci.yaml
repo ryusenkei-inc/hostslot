@@ -48,26 +48,7 @@ jobs:
       - name: Secret scan
         run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --config /repo/.gitleaks.toml --redact --verbose
 
+  # vet, test on Linux, macOS and Windows, and builds for every GOOS/GOARCH in .goreleaser.yaml (shared workflow in toolkit)
+  #   The defaults match this repository: Go from go.mod, ./..., the three OSes, and linux/darwin/windows × amd64/arm64
   go:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-      # Go version from go.mod
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: Vet
-        run: go vet ./...
-      - name: Test
-        run: go test ./...
-      - name: Cross-compile
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-            echo "== $target"
-            GOOS=${target%/*} GOARCH=${target#*/} go build ./...
-          done
+    uses: ryusenkei-inc/toolkit/.github/workflows/reusable-go.yaml@main

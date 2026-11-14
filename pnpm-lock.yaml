@@ -9,14 +9,14 @@ importers:
   .:
     devDependencies:
       '@ryusenkei/conventions':
-        specifier: ^0.8.2
-        version: 0.8.2(typescript@5.9.3)
+        specifier: ^0.9.0
+        version: 0.9.0(typescript@5.9.3)
       '@ryusenkei/prose-lint':
         specifier: ^0.2.0
         version: 0.2.0
       '@ryusenkei/scripts':
-        specifier: ^0.2.1
-        version: 0.2.1
+        specifier: ^0.4.1
+        version: 0.4.1
       '@types/node':
         specifier: ^26.6.1
         version: 26.6.4
@@ -143,8 +143,8 @@ packages:
   '@rolldown/pluginutils@1.0.1':
     resolution: {integrity: sha512-2j9bGt5Jh8hj+vPtgzPtl72j0yRxHAyumoo6TNfAjsLB04UtpSvPbPcDcBMxz7n+9CYB0c1GxQFxYRg2jimqGw==}
 
-  '@ryusenkei/conventions@0.8.2':
-    resolution: {integrity: sha512-c7HMhLJZ5YR7sZrArW0caZeSuLe2lKlnfw3ArzgbuEuUT5eyUwvU+GDSpT0atlkBn9hJvPWrUbXKH1DeVjv99Q==}
+  '@ryusenkei/conventions@0.9.0':
+    resolution: {integrity: sha512-4pkPYIMn4Uv5mGMhvqV/GeLO5X7Kgmy0yrE+Lx8Ve1q+0bbRLHlv+xTcffWdrKqqwWaEJuD4T9LcxF++WA4k0g==}
     engines: {node: '>=24'}
     hasBin: true
     peerDependencies:
@@ -153,13 +153,16 @@ packages:
       typescript:
         optional: true
 
+  '@ryusenkei/core@0.5.0':
+    resolution: {integrity: sha512-fiMRqWvog1aBxoiVmHwCIRmC6Q1l/NSlO6UHU4LDvQj2CgVReSe5O2RMTyPare1jeQXU+erq66xmPF2CPoeLMA==}
+
   '@ryusenkei/prose-lint@0.2.0':
     resolution: {integrity: sha512-HHQpQnaKZX5BGUdMFBb3Uu+hv28lqaL0p8VuHtWnbdWrTcQao4/gykCeavWuGkpPg1W+NmReZqj0GgtpICR+JQ==}
     engines: {node: '>=24'}
     hasBin: true
 
-  '@ryusenkei/scripts@0.2.1':
-    resolution: {integrity: sha512-1sx58CgLrCNo28wNlfF/XqtBx4wiEV18P+yCYP6mbyqdiLhXHafbzf5HUt4Wj6FZOvo5l/91AnPDDmTXSWGMLg==}
+  '@ryusenkei/scripts@0.4.1':
+    resolution: {integrity: sha512-RWsrMm7Jhu6dwCRUem8rxRhWM+Ovmp0tqcd7KC4P0KmiWPt/8jSMT6kgBLyclSpUditwQKzLY95zpcxoHedbfw==}
     engines: {node: '>=24'}
     hasBin: true
 
@@ -527,16 +530,19 @@ snapshots:
 
   '@rolldown/pluginutils@1.0.1': {}
 
-  '@ryusenkei/conventions@0.8.2(typescript@5.9.3)':
+  '@ryusenkei/conventions@0.9.0(typescript@5.9.3)':
     dependencies:
       '@ryusenkei/prose-lint': 0.2.0
     optionalDependencies:
       typescript: 5.9.3
 
+  '@ryusenkei/core@0.5.0': {}
+
   '@ryusenkei/prose-lint@0.2.0': {}
 
-  '@ryusenkei/scripts@0.2.1':
+  '@ryusenkei/scripts@0.4.1':
     dependencies:
+      '@ryusenkei/core': 0.5.0
       cross-spawn: 7.0.6
 
   '@types/chai@5.2.3':

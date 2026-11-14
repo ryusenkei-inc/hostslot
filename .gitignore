@@ -11,6 +11,8 @@ coverage/
 *.tsbuildinfo
 .astro/
 .wrangler/
+# Terraform の作業のディレクトリ（`.terraform.lock.hcl` は追跡する）
+.terraform/
 
 # ---- 秘密値（コミット禁止。雛形の .env.example のみ追跡） ----
 .env
