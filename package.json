@@ -20,7 +20,7 @@
   "devDependencies": {
     "@ryusenkei/conventions": "^0.9.0",
     "@ryusenkei/prose-lint": "^0.2.0",
-    "@ryusenkei/scripts": "^0.4.1",
+    "@ryusenkei/scripts": "^0.5.1",
     "@types/node": "^26.6.1",
     "typescript": "^5.9.3",
     "vitest": "^5.1.0"
