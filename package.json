@@ -12,13 +12,13 @@
     "lint:deps": "node scripts/deps.ts",
     "typecheck": "pnpm -r --if-present typecheck && tsc",
     "test": "go test ./... && vitest run --passWithNoTests",
-    "check": "pnpm lint && pnpm test",
+    "check": "node scripts/check.ts",
     "env:push": "node scripts/env.ts push",
     "repo:settings": "ryusenkei-repo-settings",
     "prepare": "git config core.hooksPath .githooks"
   },
   "devDependencies": {
-    "@ryusenkei/conventions": "^0.9.0",
+    "@ryusenkei/conventions": "^0.10.1",
     "@ryusenkei/prose-lint": "^0.2.0",
     "@ryusenkei/scripts": "^0.5.1",
     "@types/node": "^26.6.1",

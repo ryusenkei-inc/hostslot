@@ -341,7 +341,7 @@ pnpm check           # lint and test (run by pre-push, through hostslot when ins
 ```
 
 - CI runs `go vet` and `go test` on Linux, macOS and Windows, cross-compiles, and checks TypeScript, prose, the PR title and secrets
-- Releases: pushing a `v*` tag tests, checks that `orca-plugin.json` has the same version (the tag is also the plugin's version) and publishes binaries with GoReleaser
+- Releases: run `pnpm check --all` locally first, then pushing a `v*` tag tests, checks that `orca-plugin.json` has the same version (the tag is also the plugin's version) and publishes binaries with GoReleaser
 - Dev tooling: [`@ryusenkei/conventions`](https://www.npmjs.com/package/@ryusenkei/conventions) (shared rules and files; don't edit them by hand) and [`@ryusenkei/prose-lint`](https://www.npmjs.com/package/@ryusenkei/prose-lint)
 
 ## License
