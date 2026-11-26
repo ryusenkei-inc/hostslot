@@ -13,6 +13,7 @@ updates:
       default-days: 2
       exclude:
         - "@ryusenkei/*"
+        - "@tunasand/*"
     commit-message:
       prefix: build
       include: scope
@@ -21,6 +22,7 @@ updates:
       ryusenkei:
         patterns:
           - "@ryusenkei/*"
+          - "@tunasand/*"
       # minor・patch は1つの PR にまとめる（major は個別の PR でレビュー）
       minor-and-patch:
         update-types:
